@@ -39,3 +39,6 @@
 ## Credits
 - **Source:** [GitHub](https://github.com/DropDaDeuce/Time-Never-Stops)
 - **Deeej:** For providing a wonderful template: [GitHub](https://github.com/weedeej/S1MONO_IL2CPP_Template)
+
+## Disclaimer
+- **AI Content:** Out of respect for those that wish to avoid AI content. This mod was created with the assistance of AI tools. The Icon was generated using ChatGPT v5.
