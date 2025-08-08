@@ -933,7 +933,6 @@
 	<ItemGroup>
 		<Compile Include="Core.cs" />
 		<Compile Include="TemplateUtils\AssetBundleUtils.cs" />
-		<Compile Include="TimeManagerHarmony.cs" />
 		<Folder Include="Libs\" />
 		<!--Uncomment if with assetbundle-->
 		<!--<EmbeddedResource Include="Assets\your.assetbundle" />-->
