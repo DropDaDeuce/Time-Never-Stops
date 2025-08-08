@@ -8,7 +8,7 @@ using MelonLoader;
 using System.Collections;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.0.0", "DropDaDeuce", null)] // Change this
+[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.0.1", "DropDaDeuce", null)] // Change this
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace Time_Never_Stops

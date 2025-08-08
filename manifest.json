@@ -2,7 +2,7 @@
   "namespace": "DropDaDeuce",
   "name": "Time Never Stops",
   "description": "Time no longer stops at 4AM. Also adds a config option to set the day speed multiplier.",
-  "version_number": "1.0.0",
+  "version_number": "1.0.1",
   "dependencies": [
     "LavaGang-MelonLoader-0.7.*"
   ],

@@ -25,8 +25,8 @@
 ## Usage
 
 - **Sleep:**  
-  Sleep as usual between 6pm and 4am. Time will not freeze, and you’ll wake up at 7:00 AM with the daily summary.
-- **Skip Sleep:**
+  Sleep as usual between 6pm and 4am. Time will not freeze, and you will wake up at 7:00 AM with the daily summary.
+- **Skip Sleep:**  
   Skip sleep, and the game will continue to progress. The daily summary will still appear at 7:00 AM.
 - **Change Day Speed:**  
   Use the mod settings to set your preferred time progression speed.

@@ -7,9 +7,9 @@ repository = "https://thunderstore.io"
 [package]
 namespace = "DropDaDeuce"
 name = "TimeNeverStops_IL2Cpp"
-versionNumber = "1.0.0"
+versionNumber = "1.0.1"
 description = "Time no longer stops at 4AM. Also adds a config option to set the day speed multiplier."
-websiteUrl = "https://github.com/DropDaDeuce/LethalGargoyles"
+websiteUrl = "https://github.com/DropDaDeuce/Time-Never-Stops"
 containsNsfwContent = false
 [package.dependencies]
 LavaGang-MelonLoader = "0.7.1"
