@@ -2,7 +2,7 @@
 	<PropertyGroup>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>disable</Nullable>
-		<RootNamespace>MONO_IL2CPP_Template</RootNamespace> <!--Change this-->
+		<RootNamespace>Time Never Stops SLN</RootNamespace> <!--Change this-->
 		<LangVersion>default</LangVersion>
 		<IsPackable>false</IsPackable>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
@@ -15,18 +15,18 @@
 
 	<PropertyGroup Condition="'$(Configuration)' == 'MONO'">
 		<TargetFramework>netstandard2.1</TargetFramework>
-		<AssemblyName>Template_Mono</AssemblyName> <!--Change this-->
+		<AssemblyName>TimeNeverStops_Mono</AssemblyName> <!--Change this-->
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)' == 'IL2CPP'">
 		<TargetFramework>net6.0</TargetFramework>
-		<AssemblyName>Template_IL2Cpp</AssemblyName> <!--Change this-->
+		<AssemblyName>TimeNeverStops_IL2Cpp</AssemblyName> <!--Change this-->
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)' == 'MONO'">
-		<S1Dir>D:\Program Files (x86)\Steam\steamapps\common\Schedule I(MONO)</S1Dir> <!--Change this-->
+		<S1Dir>D:\Program Files\Steam App\steamapps\common\Schedule 1 Mono</S1Dir> <!--Change this-->
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)' == 'IL2CPP'">
-		<S1Dir>D:\Program Files (x86)\Steam\steamapps\common\Schedule I(IL2CPP)</S1Dir> <!--Change this-->
+		<S1Dir>D:\Program Files\Steam App\steamapps\common\Schedule I Test</S1Dir> <!--Change this-->
 	</PropertyGroup>
 
 
@@ -933,8 +933,8 @@
 	<ItemGroup>
 		<Compile Include="Core.cs" />
 		<Compile Include="TemplateUtils\AssetBundleUtils.cs" />
+		<Compile Include="TimeManagerHarmony.cs" />
 		<Folder Include="Libs\" />
-		<Folder Include="Assets\" />
 		<!--Uncomment if with assetbundle-->
 		<!--<EmbeddedResource Include="Assets\your.assetbundle" />-->
 	</ItemGroup>

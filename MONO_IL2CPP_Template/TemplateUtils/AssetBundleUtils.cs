@@ -1,7 +1,7 @@
 ﻿using MelonLoader;
 using UnityEngine;
 
-namespace MONO_IL2CPP_Template.TemplateUtils
+namespace Time_Never_Stops.TemplateUtils
 {
     public static class AssetBundleUtils
     {

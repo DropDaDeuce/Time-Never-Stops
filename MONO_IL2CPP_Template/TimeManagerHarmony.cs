@@ -2,11 +2,9 @@
 using HarmonyLib;
 using Il2CppScheduleOne.DevUtilities;
 using Il2CppScheduleOne.GameTime;
-using Il2CppScheduleOne.Persistence; // For NetworkSingleton<DailySummary>
-using Il2CppScheduleOne.PlayerScripts;
 using Il2CppScheduleOne.UI; // For Player.Local
 
-namespace Time_Never_Stops
+namespace Time_Never_Stops_TMH
 {
     [HarmonyPatch(typeof(TimeManager), "get_IsEndOfDay")]
     public static class Patch_IsEndOfDay
