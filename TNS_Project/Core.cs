@@ -2,98 +2,183 @@
 using Il2CppFishNet;
 using Il2CppScheduleOne.DevUtilities;
 using Il2CppScheduleOne.GameTime;
-using Il2CppScheduleOne.UI;
 using Il2CppScheduleOne.PlayerScripts;
+using Il2CppScheduleOne.UI;
 using MelonLoader;
+using MelonLoader.Utils;
 using System.Collections;
+using System.Globalization;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.0.2", "DropDaDeuce", null)] // Change this
+// Change this to your mod's info
+[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.1.0", "DropDaDeuce", null)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace Time_Never_Stops
 {
     public class Core : MelonMod
     {
+
         private MelonPreferences_Category cfgCategory;
-        private MelonPreferences_Entry<float> cfgDaySpeed;
+        private MelonPreferences_Entry<string> cfgDaySpeedStr;
+        private MelonPreferences_Entry<float> cfgLegacyDaySpeed;
+
+        private bool _updatingPref;
+
+        private const float DefaultSpeed = 1.0f;
+        private const float MinSpeed = 0.1f;
+        private const float MaxSpeed = 100.0f;
 
         public override void OnInitializeMelon()
         {
-            cfgCategory = MelonPreferences.CreateCategory("TimeNeverStops", "Time Never Stops Settings");
-            cfgDaySpeed = cfgCategory.CreateEntry<float>(
-                "DaySpeedMultiplier",
-                1.0f,
-                "Day Speed Multiplier",
-                "Sets the in-game time speed multiplier. 1.0 = normal speed, 0.5 = half speed, 2.0 = double speed.\nMinimum 0.1, Maximum 3.0. Default = 1.0 (Vanilla Game Speed)",
-                false, false
-            );
-            MelonCoroutines.Start(SetDaySpeedLoop());
-            LoggerInstance.Msg("Time Never Stops Initialized.");
-            cfgDaySpeed.OnEntryValueChanged.Subscribe((oldV, newV) =>
+            // 1) Legacy read from DEFAULT MelonPreferences.cfg
+            var legacyCat = MelonPreferences.CreateCategory("TimeNeverStops");
+            cfgLegacyDaySpeed = legacyCat.GetEntry<float>("DaySpeedMultiplier")
+                ?? legacyCat.CreateEntry(
+                    "DaySpeedMultiplier",
+                    DefaultSpeed,
+                    "Day Speed Multiplier",
+                    "Sets the in-game time speed multiplier. 1.0 = normal speed, 0.5 = half speed, 2.0 = double speed.Minimum 0.1, Maximum 3.0. Default = 1.0 (Vanilla Game Speed)",
+                    false, false);
+            legacyCat.DeleteEntry("DaySpeedMultiplier"); // remove old entry if exists
+
+            if (cfgLegacyDaySpeed.Value != DefaultSpeed)
             {
-                var tm = TimeManager.Instance;
-                if (tm != null)
+                // If the legacy value is not the default, warn user and migrate
+                MelonLogger.Warning($"Legacy DaySpeedMultiplier found with value {cfgLegacyDaySpeed.Value}. Migrating to new config system.");
+            }
+            string migratedDefaultStr = Math.Clamp(cfgLegacyDaySpeed.Value,MinSpeed,MaxSpeed).ToString("R", CultureInfo.InvariantCulture);
+
+            // 2) Rebind to your own file
+            var cfgDir = Path.Combine(MelonEnvironment.UserDataDirectory, "DropDaDeuce-TimeNeverStops");
+            var cfgFile = Path.Combine(cfgDir, "TimeNeverStops.cfg");
+            Directory.CreateDirectory(cfgDir);
+
+            cfgCategory = legacyCat; // reuse same object
+            legacyCat = null; // no longer needed
+
+            cfgCategory.SetFilePath(cfgFile, autoload: File.Exists(cfgFile), printmsg: true);
+
+            // 3) New (string) entry — only use migrated default if missing
+            cfgDaySpeedStr = cfgCategory.GetEntry<string>("DaySpeedMultiplier")
+                         ?? cfgCategory.CreateEntry(
+                                "DaySpeedMultiplier",
+                                migratedDefaultStr,
+                                "Day Speed Multiplier",
+                                "String parsed to float by the mod.\n1.0 = normal, 0.5 = half, 2.0 = double.\nMin 0.1, Max 100.0 (Why? Because.), Default 1.0 (Vanilla Game Speed).",
+                                false, false);
+
+            // 4) Validate once and write file (no forced rounding)
+            var initial = Sanitize(ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed));
+            if (!IsStringValidAndInRange(cfgDaySpeedStr.Value))
+                cfgDaySpeedStr.Value = initial.ToString(CultureInfo.InvariantCulture);
+
+            _updatingPref = true;
+            cfgCategory.SaveToFile();
+            _updatingPref = false;
+
+            // 5) Changes: accept any precision; only write back if invalid/out of range
+            cfgDaySpeedStr.OnEntryValueChanged.Subscribe((oldV, newV) =>
+            {
+                if (_updatingPref) return;
+
+                var parsed = ParseFloatOrDefault(newV, DefaultSpeed);
+                var clamped = Sanitize(parsed);
+
+                if (!IsStringValidAndInRange(newV))
                 {
-                    float m = Mathf.Clamp(newV, 0.1f, 3.0f);
-                    tm.TimeProgressionMultiplier = m;
-                    LoggerInstance.Msg($"Day speed set to {m:0.##}x");
+                    _updatingPref = true;
+                    cfgDaySpeedStr.Value = clamped.ToString(CultureInfo.InvariantCulture);
+                    cfgCategory.SaveToFile(false);
+                    _updatingPref = false;
                 }
+
+                ApplyDaySpeed(clamped);
             });
+
+            MelonCoroutines.Start(SetDaySpeedLoop());
         }
 
+        // helpers
+        private static bool TryParseFloatInvariant(string s, out float value) =>
+            float.TryParse(s, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value);
+
+        private static float ParseFloatOrDefault(string s, float fallback) =>
+            (TryParseFloatInvariant(s, out var v) && float.IsFinite(v)) ? v : fallback;
+
+        private static float Sanitize(float v) =>
+            Math.Clamp(float.IsFinite(v) ? v : DefaultSpeed, MinSpeed, MaxSpeed);
+
+        // accept any string that parses and is within range
+        private static bool IsStringValidAndInRange(string s) =>
+            TryParseFloatInvariant(s, out var v) && float.IsFinite(v) && v >= MinSpeed && v <= MaxSpeed;
+
+        // runtime application
         private IEnumerator SetDaySpeedLoop()
         {
-            // Wait for TimeManager to exist
-            while (TimeManager.Instance == null)
-                yield return null;
-            var timeManager = TimeManager.Instance;
+            var tick = new WaitForSeconds(1f);
 
-            // Clamp and set the multiplier
-            float multiplier = Mathf.Clamp(cfgDaySpeed.Value, 0.1f, 3.0f);
-            timeManager.TimeProgressionMultiplier = multiplier;
-            LoggerInstance.Msg($"Day speed set to {multiplier:0.##}x ({multiplier * 100f:0.#}% of normal speed)");
+            while (true)
+            {
+                // Wait for TimeManager to exist
+                while (TimeManager.Instance == null)
+                    yield return null;
+
+                var tm = TimeManager.Instance;
+                float last = ReadPref();
+                ApplyDaySpeed(last);
+
+                // Stay in this loop while the same TimeManager instance is alive
+                while (TimeManager.Instance == tm)
+                {
+                    cfgCategory.LoadFromFile(false); // pick up manual edits
+                    float cur = ReadPref();
+
+                    if (Differs(cur, last))
+                    {
+                        last = cur;
+                        ApplyDaySpeed(last);
+                    }
+
+                    yield return tick;
+                }
+
+                // If we got here, TimeManager.Instance changed/null’d; loop back and reattach
+            }
+
+            float ReadPref()
+            {
+                // Single source of truth for parsing + sanitizing
+                return Sanitize(ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed));
+            }
+
+            static bool Differs(float a, float b, float eps = 1e-4f)
+                => Mathf.Abs(a - b) > eps;
         }
 
-        public override void OnUpdate()
+        private static void ApplyDaySpeed(float newSpeed)
         {
-            // Press F12 to fast forward to 11PM (23:00)
-            if (Input.GetKeyDown(KeyCode.F12))
+            var tm = TimeManager.Instance;
+            if (tm == null) return;
+
+            var safe = Sanitize(newSpeed);
+            if (Mathf.Abs(tm.TimeProgressionMultiplier - safe) > 0.0001f)
             {
-                var timeManager = Il2CppScheduleOne.GameTime.TimeManager.Instance;
-                if (timeManager != null)
-                {
-                    timeManager.SetTime(2300, true); // 2300 = 11:00 PM
-                    MelonLogger.Msg("Fast forwarded to 11PM for testing.");
-                }
+                tm.TimeProgressionMultiplier = safe;
+                MelonLogger.Msg($"Day speed set to {safe:0.########}x");
             }
         }
     }
 
-   public static class PatchLogger
+    // --- Your Harmony patches are now children of the namespace ---
+
+    public static class PatchLogger
     {
         public static void LogPatchLoad(string patchName)
         {
             MelonLogger.Msg($"[Harmony] {patchName} loaded.");
         }
     }
-
-    //Patches for TimeManager and SleepCanvas to modify time behavior
-
-    /*[HarmonyPatch(typeof(TimeManager), "get_IsEndOfDay")]
-    public static class Patch_IsEndOfDay
-    {
-        static Patch_IsEndOfDay()
-        {
-            PatchLogger.LogPatchLoad(nameof(Patch_IsEndOfDay));
-        }
-
-        public static bool Prefix(ref bool __result)
-        {
-            __result = false; // Never stop time at 4am
-            return false;     // Skip original getter
-        }
-    }*/
 
     [HarmonyPatch(typeof(TimeManager), "Tick")]
     [HarmonyPriority(Priority.High)]

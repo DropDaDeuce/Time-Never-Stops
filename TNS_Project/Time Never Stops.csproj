@@ -6,7 +6,7 @@
 		<LangVersion>default</LangVersion>
 		<IsPackable>false</IsPackable>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
-		<FileVersion>1.0.1</FileVersion>
+		<FileVersion>1.1.0</FileVersion>
 		<NeutralLanguage>en-US</NeutralLanguage>
 		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
@@ -28,6 +28,12 @@
 	<PropertyGroup Condition="'$(Configuration)' == 'IL2CPP'">
 		<S1Dir>D:\Program Files\Steam App\steamapps\common\Schedule I Test</S1Dir> <!--Change this-->
 	</PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <Reference>
+      <Private>false</Private>
+    </Reference>
+  </ItemDefinitionGroup>
 
 
 	<ItemGroup Condition="'$(Configuration)' == 'MONO'">
@@ -952,4 +958,8 @@
 	<ItemGroup Condition="'$(Configuration)' == 'MONO'">
 		<Publicize Include="Assembly-CSharp:ScheduleOne.NPCs.NPC.Start" />
 	</ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="D:\Program Files\Steam App\steamapps\common\Schedule I Test\Mods\" />
+  </Target>
 </Project>
