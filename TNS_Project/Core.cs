@@ -120,36 +120,43 @@ namespace Time_Never_Stops
 
             while (true)
             {
-                // Wait for TimeManager to exist
-                while (TimeManager.Instance == null)
-                    yield return null;
+                while (TimeManager.Instance == null) yield return null;
 
                 var tm = TimeManager.Instance;
-                float last = ReadPref();
+                float last = ReadPrefAndNormalize();
                 ApplyDaySpeed(last);
 
-                // Stay in this loop while the same TimeManager instance is alive
+                int i = 0;
                 while (TimeManager.Instance == tm)
                 {
-                    cfgCategory.LoadFromFile(false); // pick up manual edits
-                    float cur = ReadPref();
+                    // pull manual edits, but not every frame
+                    if ((i++ % 2) == 0) cfgCategory.LoadFromFile(false);
 
-                    if (Differs(cur, last))
+                    float desired = ReadPrefAndNormalize();
+
+                    if (Differs(desired, last) || Differs(desired, tm.TimeProgressionMultiplier))
                     {
-                        last = cur;
+                        last = desired;
                         ApplyDaySpeed(last);
                     }
 
                     yield return tick;
                 }
-
-                // If we got here, TimeManager.Instance changed/null’d; loop back and reattach
             }
 
-            float ReadPref()
+            float ReadPrefAndNormalize()
             {
-                // Single source of truth for parsing + sanitizing
-                return Sanitize(ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed));
+                var raw = ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed);
+                var val = Sanitize(float.IsFinite(raw) ? raw : DefaultSpeed);
+
+                // Optional: reflect sanitized value back to the file so it stays clean.
+                var s = val.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                if (cfgDaySpeedStr.Value != s)
+                {
+                    cfgDaySpeedStr.Value = s;
+                    cfgCategory.SaveToFile(false);
+                }
+                return val;
             }
 
             static bool Differs(float a, float b, float eps = 1e-4f)

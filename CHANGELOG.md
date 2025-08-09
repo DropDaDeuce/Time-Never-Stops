@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1 - Minor Fix – 2025-08-09
+
+### Fixed
+- SetDaySpeedLoop now checks both the config value and the current `TimeProgressionMultiplier` each tick.
+- If the in-game value differs from the config (due to other mods or game logic), it is automatically corrected.
+- Prevents cases where the day speed could silently change without user intent.
+
 ## 1.1.0 - Major Bug Fixes & Features – 2025-08-09
 
 ### Added
