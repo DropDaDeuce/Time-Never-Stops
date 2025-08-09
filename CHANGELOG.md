@@ -6,3 +6,6 @@
 
 ## 1.0.1: Minor Fixes
 - **Website Update:** Updated the website link in the mod settings to point to the correct GitHub repository.
+
+## 1.0.2: Bug Fixes
+- **Daily Summary Fix:** Fixed an issue where the daily summary UI would appear when loading a new game, and at the start of character creation. Fixced by making sure daily summary only appears after the first day has passed.

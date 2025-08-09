@@ -8,7 +8,7 @@ using MelonLoader;
 using System.Collections;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.0.1", "DropDaDeuce", null)] // Change this
+[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.0.2", "DropDaDeuce", null)] // Change this
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace Time_Never_Stops
@@ -166,7 +166,6 @@ namespace Time_Never_Stops
             return false;
         }
 
-        // --- Postfix with startup guard ---
         [HarmonyPostfix]
         public static void Postfix(TimeManager __instance)
         {
@@ -188,7 +187,8 @@ namespace Time_Never_Stops
             // re-arm daily trigger on midnight rollover
             if (lastHHmm > hhmm) firedToday = false;
 
-            if (!firedToday && !busy && hhmm >= 700)
+            // Only show summary if it's day 2 or later
+            if (!firedToday && !busy && hhmm >= 700 && __instance.ElapsedDays >= 1)
             {
                 MelonCoroutines.Start(ShowDailySummaryRoutine(__instance));
                 firedToday = true;
