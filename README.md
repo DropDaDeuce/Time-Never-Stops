@@ -12,7 +12,9 @@ If you run into any issues, please report them either in the modding discord or 
 - **Custom Day Speed:** Supports in-game time multipliers from 0.1x to 100.0x.
 - **Config File Support:** Settings are stored in `UserData/DropDaDeuce-TimeNeverStops/TimeNeverStops.cfg` for easy manual editing.
 - **Live Config Reload:** Changes made to the config file while the game is running are detected and applied automatically, without restarting.
-- **Daily Summary:** The daily summary UI is shown at 7:00 AM, even if you skip sleep.
+- **Daily Summary Options:**  
+  - Config option `EnableDailySummaryAwake` lets you choose whether the daily summary appears at 7:00 AM while awake.  
+  - Summary still appears after sleep if awake summaries are disabled.
 
 ## Installation
 
@@ -30,14 +32,18 @@ If you run into any issues, please report them either in the modding discord or 
 
 ## Usage
 
-- **Sleep:**  
-  Sleep as usual between 6 PM and 4 AM. Time will not freeze, and you will wake up at 7:00 AM with the daily summary.
+- **Normal Sleep:**  
+  Sleep between 6 PM and 4 AM. Time will not freeze, and you will wake at 7:00 AM.  
+  If `EnableDailySummaryAwake` is **enabled**, the daily summary will appear at 7:00 AM whether you slept or not.  
+  If **disabled**, the summary will only appear after sleeping.
 
-- **Skip Sleep:**  
-  Skip sleep, and the game will continue to progress. The daily summary will still appear at 7:00 AM.
+- **Skipping Sleep:**  
+  If awake summaries are enabled, the daily summary will still appear at 7:00 AM without sleeping.  
+  If disabled, no summary will appear unless you sleep.
 
-- **Change Day Speed:**  
-  Edit the config file to set your preferred time progression speed. Save the file, and the change will be applied in-game within a second.
+- **Changing Day Speed:**  
+  Edit the config file to set your preferred time progression speed (0.1x–100.0x).  
+  Save the file — the change applies in-game within a second.
 
 ## Compatibility
 
