@@ -12,7 +12,7 @@
 
 ### Changed
 - Removed custom SleepCanvas patch and restored vanilla sleep behavior.
-  - Sleeping now uses the base game’s time skip, so plants grow and cooking advances normally overnight.
+  - Sleeping now uses the base game's time skip, so plants grow and cooking advances normally overnight.
 - Integrated awake summary with sleep events via 'TimeManager.onSleepStart' and 'TimeManager.onSleepEnd'.
 
 ## 1.1.1 - Minor Fix - 2025-08-09
