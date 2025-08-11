@@ -15,6 +15,21 @@
   - Sleeping now uses the base game’s time skip, so plants grow and cooking advances normally overnight.
 - Integrated awake summary with sleep events via 'TimeManager.onSleepStart' and 'TimeManager.onSleepEnd'.
 
+## 1.2.0 - Awake Summary & Sleep Fix - 2025-08-10
+
+### Added
+- **EnableDailySummaryAwake** config toggle (default: `true`) to allow the Daily Summary to display at 07:00 while awake, and if false won't display unless the player sleeps.
+- Awake Daily Summary flow improvements:
+  - Skips first tick after load to avoid immediate trigger.
+  - Suppresses summary during sleep; marks the day handled after sleeping.
+  - Automatically runs **RankUpCanvas** after the summary closes.
+  - Ensures an EventSystem exists so the UI is interactable.
+
+### Changed
+- Removed custom SleepCanvas patch and restored vanilla sleep behavior.
+  - Sleeping now uses the base game’s time skip, so plants grow and cooking advances normally overnight.
+- Integrated awake summary with sleep events via `TimeManager.onSleepStart` and `TimeManager.onSleepEnd`.
+
 ## 1.1.1 - Minor Fix - 2025-08-09
 ### Fixed
 - SetDaySpeedLoop now checks both the config value and the current 'TimeProgressionMultiplier' each tick.
