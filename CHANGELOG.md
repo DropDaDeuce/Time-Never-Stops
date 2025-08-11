@@ -1,28 +1,43 @@
-# Change# Changelog
+# Changelog
+
+## 1.2.0 - Awake Summary & Sleep Fix - 2025-08-10
+
+### Added
+- **EnableDailySummaryAwake** config toggle (default: 'true') to allow the Daily Summary to display at 07:00 while awake, and if false won't display unless the player sleeps.
+- Awake Daily Summary flow improvements:
+  - Skips first tick after load to avoid immediate trigger.
+  - Suppresses summary during sleep; marks the day handled after sleeping.
+  - Automatically runs **RankUpCanvas** after the summary closes.
+  - Ensures an EventSystem exists so the UI is interactable.
+
+### Changed
+- Removed custom SleepCanvas patch and restored vanilla sleep behavior.
+  - Sleeping now uses the base game’s time skip, so plants grow and cooking advances normally overnight.
+- Integrated awake summary with sleep events via 'TimeManager.onSleepStart' and 'TimeManager.onSleepEnd'.
 
 ## 1.1.1 - Minor Fix - 2025-08-09
 ### Fixed
-- SetDaySpeedLoop now checks both the config value and the current `TimeProgressionMultiplier` each tick.
+- SetDaySpeedLoop now checks both the config value and the current 'TimeProgressionMultiplier' each tick.
 - If the in-game value differs from the config (due to other mods or game logic), it is automatically corrected.
 - Prevents cases where the day speed could silently change without user intent.
 
 ## 1.1.0 - Major Bug Fixes & Features - 2025-08-09
 ### Added
-- Dedicated config file at `UserData/DropDaDeuce-TimeNeverStops/TimeNeverStops.cfg` with auto-migration from old settings.
+- Dedicated config file at 'UserData/DropDaDeuce-TimeNeverStops/TimeNeverStops.cfg' with auto-migration from old settings.
 - Support for day speed multipliers up to **100.0x** (previously capped at 3.0x).
 - Ability to change DaySpeedMultiplier in-game via config file (no need to restart the game).
 
 ### Changed
 - Config entry type changed from float to string for more precise parsing and sanitization.
 - Day speed loop now:
-  - Waits for `TimeManager` before starting.
+  - Waits for 'TimeManager' before starting.
   - Reloads config file each tick to pick up manual edits.
   - Applies changes only when value differs (epsilon compare).
-  - Reattaches if `TimeManager.Instance` changes.
+  - Reattaches if 'TimeManager.Instance' changes.
 - Centralized parsing + sanitization into helper methods.
 
 ### Fixed
-- Issue where day speed could get "stuck" on the old value if `OnEntryValueChanged` was missed.
+- Issue where day speed could get "stuck" on the old value if 'OnEntryValueChanged' was missed.
 - Issue where day speed multiplier was not applied when quitting a save and loading a new/old save.
 
 ## 1.0.2 - Bug Fixes - 2025-08-08

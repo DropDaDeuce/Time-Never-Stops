@@ -11,7 +11,7 @@ using System.Globalization;
 using UnityEngine;
 
 // Change this to your mod's info
-[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.1.1", "DropDaDeuce", null)]
+[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.2.0", "DropDaDeuce", null)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace Time_Never_Stops
@@ -20,9 +20,11 @@ namespace Time_Never_Stops
     {
         private MelonPreferences_Category cfgCategory;
         private MelonPreferences_Entry<string> cfgDaySpeedStr;
+        public static MelonPreferences_Entry<bool> cfgEnableSummaryAwake;
         private MelonPreferences_Entry<float> cfgLegacyDaySpeed;
 
         private bool _updatingPref;
+        private bool _lastEnableSummaryAwake;
 
         private const float DefaultSpeed = 1.0f;
         private const float MinSpeed = 0.1f;
@@ -66,6 +68,16 @@ namespace Time_Never_Stops
                                 "Day Speed Multiplier",
                                 "String parsed to float by the mod.\n1.0 = normal, 0.5 = half, 2.0 = double.\nMin 0.1, Max 100.0 (Why? Because.), Default 1.0 (Vanilla Game Speed).",
                                 false, false);
+            cfgEnableSummaryAwake = cfgCategory.GetEntry<bool>("EnableDailySummaryAwake")
+                ?? cfgCategory.CreateEntry(
+                    "EnableDailySummaryAwake",
+                    true,
+                    "Enable Daily Summary While Awake",
+                    "\nIf enabled, the daily summary will be shown when the player is awake. If disabled, it will only show when the player sleeps.",
+                    false, false);
+
+            _lastEnableSummaryAwake = cfgEnableSummaryAwake.Value;
+            MelonCoroutines.Start(WatchSummaryToggle());
 
             // 4) Validate once and write file (no forced rounding)
             var initial = Sanitize(ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed));
@@ -93,6 +105,18 @@ namespace Time_Never_Stops
                 }
 
                 ApplyDaySpeed(clamped);
+            });
+
+            TimeManager.onSleepStart += new Action(() =>
+            {
+                Patch_Tick_XPMenu.SuppressDuringSleep(true);
+            });
+
+            // Subscribe to sleep end
+            TimeManager.onSleepEnd += new Action<int>((minutesSlept) =>
+            {
+                Patch_Tick_XPMenu.SuppressDuringSleep(false);
+                Patch_Tick_XPMenu.MarkHandledForToday();
             });
 
             MelonCoroutines.Start(SetDaySpeedLoop());
@@ -174,6 +198,24 @@ namespace Time_Never_Stops
                 MelonLogger.Msg($"Day speed set to {safe:0.########}x");
             }
         }
+
+        private IEnumerator WatchSummaryToggle()
+        {
+            var tick = new WaitForSeconds(1f);
+
+            while (true)
+            {
+                bool cur = cfgEnableSummaryAwake.Value;
+                if (cur != _lastEnableSummaryAwake)
+                {
+                    _lastEnableSummaryAwake = cur;
+                    cfgCategory.SaveToFile(false);
+                    MelonLogger.Msg($"EnableDailySummaryAwake: {(cur ? "ON" : "OFF")}");
+                }
+
+                yield return tick;
+            }
+        }
     }
 
     // --- Your Harmony patches are now children of the namespace ---
@@ -193,8 +235,18 @@ namespace Time_Never_Stops
         private static bool firedToday, busy;
         private static int lastHHmm;
 
+        // new:
+        private static bool suppressForSleep;
+
+        public static void SuppressDuringSleep(bool on) => suppressForSleep = on;
+        public static void MarkHandledForToday()
+        {
+            firedToday = true;   // we already showed summary via SleepCanvas
+            lastHHmm = 700;      // keep baseline sane after fast-forward
+        }
+
         // NEW: skip the very first Tick after a fresh load/scene init
-        private static bool startupSkip = true;
+        public static bool startupSkip = true;
 
         static Patch_Tick_XPMenu()
         {
@@ -260,7 +312,17 @@ namespace Time_Never_Stops
         [HarmonyPostfix]
         public static void Postfix(TimeManager __instance)
         {
-            if (!InstanceFinder.IsHost || GameManager.IS_TUTORIAL) return;
+
+            bool enableSummaryAwake = Core.cfgEnableSummaryAwake.Value;
+            if (!InstanceFinder.IsHost || GameManager.IS_TUTORIAL || !enableSummaryAwake) return;
+
+            // NEW: do nothing if sleep is running, or if we’re suppressing due to sleep
+            if (__instance.SleepInProgress || suppressForSleep) return; // SleepCanvas owns the flow here. 
+                                                                        // SleepInProgress is set when sleep begins and cleared at end. 
+
+            // don't start if the DS UI is already open for any reason
+            var ds = NetworkSingleton<DailySummary>.Instance;
+            if (ds != null && ds.IsOpen) return;
 
             // Skip the first tick right after load/init so we don’t fire immediately on startup
             if (startupSkip)
@@ -269,7 +331,7 @@ namespace Time_Never_Stops
                 lastHHmm = __instance.CurrentTime; // initialize baseline
 
                 // Prevent summary on load if time is already past 7:00
-                firedToday = __instance.CurrentTime >= 700;
+                firedToday = true;
                 return;
             }
 
@@ -316,69 +378,43 @@ namespace Time_Never_Stops
             while (ds.IsOpen)
                 yield return null;
 
+            // Trigger RankUpCanvas right after the Daily Summary closes
+            var rankCanvas = UnityEngine.Object.FindObjectOfType<RankUpCanvas>(true);
+            if (rankCanvas != null)
+            {
+                rankCanvas.StartEvent();
+
+                // HUD off + cursor ON so you can click the UI
+                if (hud != null) hud.canvas.enabled = false;
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+                Time.timeScale = 1f; // just in case
+
+                // Wait until it's done running
+                while (rankCanvas.IsRunning)
+                    yield return null;
+            }
+
             // Handshake for clients
             tm.MarkHostSleepDone();
 
             // Restore HUD + cursor lock for gameplay
-            if (hud != null) hud.canvas.enabled = true;
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
-
-            busy = false;
-        }
-    }
-
-    [HarmonyPatch(typeof(SleepCanvas), "SleepStart")]
-    public static class Patch_SleepCanvas_SleepStart
-    {
-        static Patch_SleepCanvas_SleepStart()
-        {
-            PatchLogger.LogPatchLoad(nameof(Patch_SleepCanvas_SleepStart));
-        }
-
-        public static bool Prefix(SleepCanvas __instance)
-        {
-            Player.Local.SetReadyToSleep(false);
-            __instance.MenuContainer.gameObject.SetActive(false);
-            __instance.IsMenuOpen = false;
-            __instance.WakeLabel.text = "Waking up at " + TimeManager.Get12HourTime(700f);
-            MelonCoroutines.Start(CustomSleepCoroutine(__instance));
-            return false; // Skip original
-        }
-
-        private static IEnumerator CustomSleepCoroutine(SleepCanvas __instance)
-        {
-            __instance.BlackOverlay.enabled = true;
-            __instance.SleepMessageLabel.text = string.Empty;
-
-            if (InstanceFinder.IsServer)
+            if (hud != null)
             {
-                MelonLogger.Msg("Resetting host sleep done");
-                NetworkSingleton<TimeManager>.Instance.ResetHostSleepDone();
+                hud.canvas.enabled = true;
+            }
+            else
+            {
+                hud = Singleton<HUD>.Instance;
+                if (hud != null)
+                    hud.canvas.enabled = true;
+                else
+                    MelonLogger.Warning("HUD not found. Cannot restore HUD canvas.");
             }
 
-            var hud = Singleton<HUD>.Instance;
-            if (hud != null) hud.canvas.enabled = false;
-
-            __instance.LerpBlackOverlay(1f, 0.5f);
-            yield return new WaitForSecondsRealtime(0.5f).Cast<Il2CppSystem.Object>();
-
-            __instance.onSleepFullyFaded?.Invoke();
-
-            yield return new WaitForSecondsRealtime(0.35f).Cast<Il2CppSystem.Object>();
-
-            var tm = TimeManager.Instance;
-            tm?.SetTime(659, true);
-
-            __instance.LerpBlackOverlay(0f, 0.35f);
-            yield return new WaitForSecondsRealtime(0.35f).Cast<Il2CppSystem.Object>();
-            __instance.BlackOverlay.enabled = false;
-
-            if (hud != null) hud.canvas.enabled = true;
-
-            Time.timeScale = 1f;
-
-            __instance.SetIsOpen(false);
+            busy = false;
         }
     }
 
