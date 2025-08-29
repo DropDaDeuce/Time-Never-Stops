@@ -10,7 +10,6 @@ using System.Collections;
 using System.Globalization;
 using UnityEngine;
 
-// Change this to your mod's info
 [assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.2.0", "DropDaDeuce", null)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
@@ -32,7 +31,6 @@ namespace Time_Never_Stops
 
         public override void OnInitializeMelon()
         {
-            // 1) Legacy read from DEFAULT MelonPreferences.cfg
             var legacyCat = MelonPreferences.CreateCategory("TimeNeverStops");
             cfgLegacyDaySpeed = legacyCat.GetEntry<float>("DaySpeedMultiplier")
                 ?? legacyCat.CreateEntry(
@@ -41,26 +39,23 @@ namespace Time_Never_Stops
                     "Day Speed Multiplier",
                     "Sets the in-game time speed multiplier. 1.0 = normal speed, 0.5 = half speed, 2.0 = double speed.Minimum 0.1, Maximum 3.0. Default = 1.0 (Vanilla Game Speed)",
                     false, false);
-            legacyCat.DeleteEntry("DaySpeedMultiplier"); // remove old entry if exists
+            legacyCat.DeleteEntry("DaySpeedMultiplier");
 
             if (cfgLegacyDaySpeed.Value != DefaultSpeed)
             {
-                // If the legacy value is not the default, warn user and migrate
                 MelonLogger.Warning($"Legacy DaySpeedMultiplier found with value {cfgLegacyDaySpeed.Value}. Migrating to new config system.");
             }
-            string migratedDefaultStr = Math.Clamp(cfgLegacyDaySpeed.Value,MinSpeed,MaxSpeed).ToString("R", CultureInfo.InvariantCulture);
+            string migratedDefaultStr = Math.Clamp(cfgLegacyDaySpeed.Value, MinSpeed, MaxSpeed).ToString("R", CultureInfo.InvariantCulture);
 
-            // 2) Rebind to your own file
             var cfgDir = Path.Combine(MelonEnvironment.UserDataDirectory, "DropDaDeuce-TimeNeverStops");
             var cfgFile = Path.Combine(cfgDir, "TimeNeverStops.cfg");
             Directory.CreateDirectory(cfgDir);
 
-            cfgCategory = legacyCat; // reuse same object
-            legacyCat = null; // no longer needed
+            cfgCategory = legacyCat;
+            legacyCat = null;
 
             cfgCategory.SetFilePath(cfgFile, autoload: File.Exists(cfgFile), printmsg: true);
 
-            // 3) New (string) entry — only use migrated default if missing
             cfgDaySpeedStr = cfgCategory.GetEntry<string>("DaySpeedMultiplier")
                          ?? cfgCategory.CreateEntry(
                                 "DaySpeedMultiplier",
@@ -79,7 +74,6 @@ namespace Time_Never_Stops
             _lastEnableSummaryAwake = cfgEnableSummaryAwake.Value;
             MelonCoroutines.Start(WatchSummaryToggle());
 
-            // 4) Validate once and write file (no forced rounding)
             var initial = Sanitize(ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed));
             if (!IsStringValidAndInRange(cfgDaySpeedStr.Value))
                 cfgDaySpeedStr.Value = initial.ToString(CultureInfo.InvariantCulture);
@@ -88,7 +82,6 @@ namespace Time_Never_Stops
             cfgCategory.SaveToFile();
             _updatingPref = false;
 
-            // 5) Changes: accept any precision; only write back if invalid/out of range
             cfgDaySpeedStr.OnEntryValueChanged.Subscribe((oldV, newV) =>
             {
                 if (_updatingPref) return;
@@ -107,22 +100,58 @@ namespace Time_Never_Stops
                 ApplyDaySpeed(clamped);
             });
 
-            TimeManager.onSleepStart += new Action(() =>
-            {
-                Patch_Tick_XPMenu.SuppressDuringSleep(true);
-            });
-
-            // Subscribe to sleep end
-            TimeManager.onSleepEnd += new Action<int>((minutesSlept) =>
-            {
-                Patch_Tick_XPMenu.SuppressDuringSleep(false);
-                Patch_Tick_XPMenu.MarkHandledForToday();
-            });
+            // Watch sleep state instead of binding to (non-event) fields.
+            MelonCoroutines.Start(SleepStateWatcher());
 
             MelonCoroutines.Start(SetDaySpeedLoop());
         }
 
-        // helpers
+        private IEnumerator SleepStateWatcher()
+        {
+            bool last = false;
+            TimeManager lastTm = null;
+
+            while (true)
+            {
+                // Wait for TimeManager instance
+                while (TimeManager.Instance == null)
+                {
+                    lastTm = null;
+                    last = false;
+                    yield return null;
+                }
+
+                var tm = TimeManager.Instance;
+
+                // Reset tracking if instance changed
+                if (tm != lastTm)
+                {
+                    lastTm = tm;
+                    last = tm.SleepInProgress;
+                }
+
+                bool cur = tm.SleepInProgress;
+                if (cur && !last)
+                    OnSleepStart();
+                else if (!cur && last)
+                    OnSleepEnd();
+
+                last = cur;
+                yield return null; // per-frame; change to new WaitForSeconds(0.25f) if you prefer
+            }
+        }
+
+        private void OnSleepStart()
+        {
+            Patch_Tick_XPMenu.SuppressDuringSleep(true);
+        }
+
+        private void OnSleepEnd()
+        {
+            Patch_Tick_XPMenu.SuppressDuringSleep(false);
+            Patch_Tick_XPMenu.MarkHandledForToday();
+        }
+
         private static bool TryParseFloatInvariant(string s, out float value) =>
             float.TryParse(s, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value);
 
@@ -132,11 +161,9 @@ namespace Time_Never_Stops
         private static float Sanitize(float v) =>
             Math.Clamp(float.IsFinite(v) ? v : DefaultSpeed, MinSpeed, MaxSpeed);
 
-        // accept any string that parses and is within range
         private static bool IsStringValidAndInRange(string s) =>
             TryParseFloatInvariant(s, out var v) && float.IsFinite(v) && v >= MinSpeed && v <= MaxSpeed;
 
-        // runtime application
         private IEnumerator SetDaySpeedLoop()
         {
             var tick = new WaitForSeconds(1f);
@@ -152,7 +179,6 @@ namespace Time_Never_Stops
                 int i = 0;
                 while (TimeManager.Instance == tm)
                 {
-                    // pull manual edits, but not every frame
                     if ((i++ % 2) == 0) cfgCategory.LoadFromFile(false);
 
                     float desired = ReadPrefAndNormalize();
@@ -172,7 +198,6 @@ namespace Time_Never_Stops
                 var raw = ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed);
                 var val = Sanitize(float.IsFinite(raw) ? raw : DefaultSpeed);
 
-                // Optional: reflect sanitized value back to the file so it stays clean.
                 var s = val.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 if (cfgDaySpeedStr.Value != s)
                 {
@@ -218,8 +243,6 @@ namespace Time_Never_Stops
         }
     }
 
-    // --- Your Harmony patches are now children of the namespace ---
-
     public static class PatchLogger
     {
         public static void LogPatchLoad(string patchName)
@@ -234,27 +257,22 @@ namespace Time_Never_Stops
     {
         private static bool firedToday, busy;
         private static int lastHHmm;
-
-        // new:
         private static bool suppressForSleep;
-
-        public static void SuppressDuringSleep(bool on) => suppressForSleep = on;
-        public static void MarkHandledForToday()
-        {
-            firedToday = true;   // we already showed summary via SleepCanvas
-            lastHHmm = 700;      // keep baseline sane after fast-forward
-        }
-
-        // NEW: skip the very first Tick after a fresh load/scene init
         public static bool startupSkip = true;
 
         static Patch_Tick_XPMenu()
         {
             PatchLogger.LogPatchLoad(nameof(Patch_Tick_XPMenu));
-            startupSkip = true; // ensure true on domain reload
+            startupSkip = true;
         }
 
-        // --- your existing freeze-window bypass Prefix stays the same ---
+        public static void SuppressDuringSleep(bool on) => suppressForSleep = on;
+        public static void MarkHandledForToday()
+        {
+            firedToday = true;
+            lastHHmm = 700;
+        }
+
         [HarmonyPrefix]
         public static bool Prefix(TimeManager __instance)
         {
@@ -312,35 +330,24 @@ namespace Time_Never_Stops
         [HarmonyPostfix]
         public static void Postfix(TimeManager __instance)
         {
-
-            bool enableSummaryAwake = Core.cfgEnableSummaryAwake.Value;
+            bool enableSummaryAwake = Core.cfgEnableSummaryAwake?.Value ?? true;
             if (!InstanceFinder.IsHost || GameManager.IS_TUTORIAL || !enableSummaryAwake) return;
+            if (__instance.SleepInProgress || suppressForSleep) return;
 
-            // NEW: do nothing if sleep is running, or if we’re suppressing due to sleep
-            if (__instance.SleepInProgress || suppressForSleep) return; // SleepCanvas owns the flow here. 
-                                                                        // SleepInProgress is set when sleep begins and cleared at end. 
-
-            // don't start if the DS UI is already open for any reason
             var ds = NetworkSingleton<DailySummary>.Instance;
             if (ds != null && ds.IsOpen) return;
 
-            // Skip the first tick right after load/init so we don’t fire immediately on startup
             if (startupSkip)
             {
                 startupSkip = false;
-                lastHHmm = __instance.CurrentTime; // initialize baseline
-
-                // Prevent summary on load if time is already past 7:00
+                lastHHmm = __instance.CurrentTime;
                 firedToday = true;
                 return;
             }
 
             int hhmm = __instance.CurrentTime;
-
-            // re-arm daily trigger on midnight rollover
             if (lastHHmm > hhmm) firedToday = false;
 
-            // Only show summary if it's day 2 or later
             if (!firedToday && !busy && hhmm >= 700 && __instance.ElapsedDays >= 1)
             {
                 MelonCoroutines.Start(ShowDailySummaryRoutine(__instance));
@@ -359,11 +366,10 @@ namespace Time_Never_Stops
             var hud = Singleton<HUD>.Instance;
             if (ds == null || ds.IsOpen) { busy = false; yield break; }
 
-            // HUD off + cursor ON so you can click the UI
             if (hud != null) hud.canvas.enabled = false;
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
-            Time.timeScale = 1f; // just in case
+            Time.timeScale = 1f;
 
             var es = UnityEngine.EventSystems.EventSystem.current;
             if (es == null)
@@ -373,32 +379,25 @@ namespace Time_Never_Stops
                 go.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
             }
 
-            // Open & wait until user clicks Continue
             ds.Open();
             while (ds.IsOpen)
                 yield return null;
 
-            // Trigger RankUpCanvas right after the Daily Summary closes
             var rankCanvas = UnityEngine.Object.FindObjectOfType<RankUpCanvas>(true);
             if (rankCanvas != null)
             {
                 rankCanvas.StartEvent();
-
-                // HUD off + cursor ON so you can click the UI
                 if (hud != null) hud.canvas.enabled = false;
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
-                Time.timeScale = 1f; // just in case
+                Time.timeScale = 1f;
 
-                // Wait until it's done running
                 while (rankCanvas.IsRunning)
                     yield return null;
             }
 
-            // Handshake for clients
             tm.MarkHostSleepDone();
 
-            // Restore HUD + cursor lock for gameplay
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
             if (hud != null)
@@ -418,15 +417,14 @@ namespace Time_Never_Stops
         }
     }
 
-    [HarmonyPatch(typeof(HUD), "FixedUpdate")]
-    [HarmonyPriority(Priority.Low)] // run after vanilla & other patches
+    [HarmonyPatch(typeof(HUD), "Update")]
+    [HarmonyPriority(HarmonyLib.Priority.Low)]
     public static class Patch_HUD_HideSleepPrompt
     {
         static void Postfix(HUD __instance)
         {
-            // Only shows at 04:00; just force it off
             if (__instance != null && __instance.SleepPrompt != null)
-                __instance.SleepPrompt.gameObject.SetActive(false);
+                __instance.SleepPrompt.gameObject.SetActive(fa);
         }
     }
 }
