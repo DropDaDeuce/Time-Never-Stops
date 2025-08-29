@@ -424,7 +424,7 @@ namespace Time_Never_Stops
         static void Postfix(HUD __instance)
         {
             if (__instance != null && __instance.SleepPrompt != null)
-                __instance.SleepPrompt.gameObject.SetActive(fa);
+                __instance.SleepPrompt.gameObject.SetActive(false);
         }
     }
 }
