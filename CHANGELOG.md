@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.1 - Compatibility & Stability Fix - 2025-08-29
+### Fixed
+- Crash / NullReference during game load caused by attempting to subscribe to `TimeManager` sleep callbacks before the instance existed (or after the game update changed their accessibility/signature).
+- Removed invalid delegate `+= / -=` usage on `TimeManager` members that are no longer proper events after the game update.
+- Daily Summary + Rank Up flow now reliably suppresses during sleep without relying on those callbacks.
+
+### Changed
+- Replaced direct sleep event subscriptions with a lightweight coroutine that polls `TimeManager.SleepInProgress` and triggers start/end logic on state transitions (safer across updates).
+- Switched HUD patch target from `FixedUpdate` to `Update` to keep the sleep prompt suppressed after upstream changes.
+- Defensive null checks around config + `TimeManager` usage to avoid early initialization edge cases.
+- Internal refactor: consolidated sleep suppression + daily summary rearm logic into clearer helper methods.
+
+### Notes
+- Functionality is unchanged from the player perspective; this release restores full operation after the latest game update altered internals.
+- If further game updates expose stable events again, logic can be swapped back from polling with no user-facing impact.
+
 ## 1.2.0 - Awake Summary & Sleep Fix - 2025-08-10
 
 ### Added
