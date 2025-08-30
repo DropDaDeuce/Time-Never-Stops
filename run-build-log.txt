@@ -1,0 +1,20 @@
+=========================================
+ Time Never Stops Build
+ Version: (from Version.props)
+ Script : run-build.ps1
+ Using  : powershell
+ Args   :
+=========================================
+
+tcli.exe : tcli 0.2.4+1116dc7753c6ca89a8ade1da9a8532ba09e4be55
+At D:\Projects\Schedule 1\Time Never Stops\run-build.ps1:14 char:11
++   $out = (& tcli --help 2>&1) -join "`n"
++           ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (tcli 0.2.4+1116...a8532ba09e4be55:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+
+Exit Code: 1
+[FAILED] Build/script returned an error.
+
+Press any key to close...

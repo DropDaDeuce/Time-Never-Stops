@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <!-- Single source of truth for the mod version -->
+    <ModVersion>1.3.0</ModVersion>
+    <!-- Map to standard MSBuild version properties -->
+    <Version>$(ModVersion)</Version>
+    <AssemblyVersion>$(ModVersion).0</AssemblyVersion>
+    <FileVersion>$(ModVersion).0</FileVersion>
+  </PropertyGroup>
+</Project>

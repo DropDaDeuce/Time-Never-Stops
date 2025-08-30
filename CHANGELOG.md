@@ -1,4 +1,19 @@
-# Changelog
+﻿# Changelog
+
+## 1.3.0 - Multiplier Only Mode, Mono Build & Quality Pass - 2025-08-30
+### Added
+- Separate published **Mono build** (alongside IL2CPP) with its own Thunderstore package; functionally identical feature set.
+- **Multiplier Only Mode** (`TimeMultiplierOnlyMode`): restricts the mod to just enforcing the day speed multiplier (disables 4AM freeze bypass, awake daily summary injection, sleep prompt hiding).
+- Continuous multiplier normalization: re‑applies sanitized value if external code or the game changes `TimeProgressionMultiplier`.
+
+### Changed
+- Packaging pipeline now syncs version from `Version.props` into both IL2CPP and Mono TOMLs (single source of truth).
+- Config writes reduced (only when value actually changes) to minimize disk churn.
+- Summary / sleep handling cleanly no‑ops when Multiplier Only Mode is enabled.
+
+### Notes
+- Players wanting only adjustable time speed can enable Multiplier Only Mode; default behavior remains unchanged otherwise.
+- Mono and IL2CPP zips are now built and hashed in the same run for easier release verification.
 
 ## 1.2.1 - Compatibility & Stability Fix - 2025-08-29
 ### Fixed

@@ -1,16 +1,35 @@
-﻿using HarmonyLib;
-using Il2CppFishNet;
-using Il2CppScheduleOne.DevUtilities;
-using Il2CppScheduleOne.GameTime;
-using Il2CppScheduleOne.PlayerScripts;
-using Il2CppScheduleOne.UI;
-using MelonLoader;
-using MelonLoader.Utils;
+﻿using System;
 using System.Collections;
 using System.Globalization;
+using System.Reflection;
+using HarmonyLib;
+using MelonLoader;
+using MelonLoader.Utils;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", "1.2.1", "DropDaDeuce", null)]
+#if IL2CPP
+using TimeManager = Il2CppScheduleOne.GameTime.TimeManager;
+using EDay = Il2CppScheduleOne.GameTime.EDay;
+using Player = Il2CppScheduleOne.PlayerScripts.Player;
+using HUD = Il2CppScheduleOne.UI.HUD;
+using DailySummary = Il2CppScheduleOne.UI.DailySummary;
+using RankUpCanvas = Il2CppScheduleOne.UI.RankUpCanvas;
+using GameManager = Il2CppScheduleOne.DevUtilities.GameManager;
+using DevUtilities = Il2CppScheduleOne.DevUtilities;
+using FishyNet = Il2CppFishNet;
+#else // MONO
+using TimeManager = ScheduleOne.GameTime.TimeManager;
+using EDay = ScheduleOne.GameTime.EDay;
+using Player = ScheduleOne.PlayerScripts.Player;
+using HUD = ScheduleOne.UI.HUD;
+using DailySummary = ScheduleOne.UI.DailySummary;
+using RankUpCanvas = ScheduleOne.UI.RankUpCanvas;
+using GameManager = ScheduleOne.DevUtilities.GameManager;
+using DevUtilities = ScheduleOne.DevUtilities;
+using FishyNet = FishNet;
+#endif
+
+[assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", Time_Never_Stops.BuildVersion.Value, "DropDaDeuce", null)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace Time_Never_Stops
@@ -19,8 +38,9 @@ namespace Time_Never_Stops
     {
         private MelonPreferences_Category cfgCategory;
         private MelonPreferences_Entry<string> cfgDaySpeedStr;
-        public static MelonPreferences_Entry<bool> cfgEnableSummaryAwake;
+        public  static MelonPreferences_Entry<bool> cfgEnableSummaryAwake;
         private MelonPreferences_Entry<float> cfgLegacyDaySpeed;
+        public  static MelonPreferences_Entry<bool> cfgMultiplierOnly; // NEW
 
         private bool _updatingPref;
         private bool _lastEnableSummaryAwake;
@@ -42,10 +62,10 @@ namespace Time_Never_Stops
             legacyCat.DeleteEntry("DaySpeedMultiplier");
 
             if (cfgLegacyDaySpeed.Value != DefaultSpeed)
-            {
                 MelonLogger.Warning($"Legacy DaySpeedMultiplier found with value {cfgLegacyDaySpeed.Value}. Migrating to new config system.");
-            }
-            string migratedDefaultStr = Math.Clamp(cfgLegacyDaySpeed.Value, MinSpeed, MaxSpeed).ToString("R", CultureInfo.InvariantCulture);
+
+            string migratedDefaultStr = Math.Clamp(cfgLegacyDaySpeed.Value, MinSpeed, MaxSpeed)
+                                            .ToString("R", CultureInfo.InvariantCulture);
 
             var cfgDir = Path.Combine(MelonEnvironment.UserDataDirectory, "DropDaDeuce-TimeNeverStops");
             var cfgFile = Path.Combine(cfgDir, "TimeNeverStops.cfg");
@@ -53,26 +73,43 @@ namespace Time_Never_Stops
 
             cfgCategory = legacyCat;
             legacyCat = null;
-
             cfgCategory.SetFilePath(cfgFile, autoload: File.Exists(cfgFile), printmsg: true);
+
+            // New master toggle
+            cfgMultiplierOnly = cfgCategory.GetEntry<bool>("TimeMultiplierOnlyMode")
+                ?? cfgCategory.CreateEntry(
+                    "TimeMultiplierOnlyMode",
+                    false,
+                    "Multiplier Only Mode",
+                    "If true the mod ONLY changes the day speed multiplier.\nDisables:\n- 4AM freeze bypass\n- Daily summary while awake\n- Sleep prompt hiding.\nChange at runtime is applied but a restart is safest.",
+                    false, false);
 
             cfgDaySpeedStr = cfgCategory.GetEntry<string>("DaySpeedMultiplier")
                          ?? cfgCategory.CreateEntry(
                                 "DaySpeedMultiplier",
                                 migratedDefaultStr,
                                 "Day Speed Multiplier",
-                                "String parsed to float by the mod.\n1.0 = normal, 0.5 = half, 2.0 = double.\nMin 0.1, Max 100.0 (Why? Because.), Default 1.0 (Vanilla Game Speed).",
+                                "String parsed to float by the mod.\n1.0 = normal, 0.5 = half, 2.0 = double.\nMin 0.1, Max 100.0, Default 1.0.",
                                 false, false);
+
             cfgEnableSummaryAwake = cfgCategory.GetEntry<bool>("EnableDailySummaryAwake")
                 ?? cfgCategory.CreateEntry(
                     "EnableDailySummaryAwake",
                     true,
                     "Enable Daily Summary While Awake",
-                    "\nIf enabled, the daily summary will be shown when the player is awake. If disabled, it will only show when the player sleeps.",
+                    "If enabled, the daily summary will be shown while awake (unless Multiplier Only Mode is ON).",
                     false, false);
 
-            _lastEnableSummaryAwake = cfgEnableSummaryAwake.Value;
-            MelonCoroutines.Start(WatchSummaryToggle());
+            if (!cfgMultiplierOnly.Value)
+            {
+                _lastEnableSummaryAwake = cfgEnableSummaryAwake.Value;
+                MelonCoroutines.Start(WatchSummaryToggle());
+                MelonCoroutines.Start(SleepStateWatcher());
+            }
+            else
+            {
+                MelonLogger.Msg("TimeMultiplierOnlyMode enabled: all non-multiplier features disabled.");
+            }
 
             var initial = Sanitize(ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed));
             if (!IsStringValidAndInRange(cfgDaySpeedStr.Value))
@@ -82,13 +119,11 @@ namespace Time_Never_Stops
             cfgCategory.SaveToFile();
             _updatingPref = false;
 
-            cfgDaySpeedStr.OnEntryValueChanged.Subscribe((oldV, newV) =>
+            cfgDaySpeedStr.OnEntryValueChanged.Subscribe((_, newV) =>
             {
                 if (_updatingPref) return;
-
                 var parsed = ParseFloatOrDefault(newV, DefaultSpeed);
                 var clamped = Sanitize(parsed);
-
                 if (!IsStringValidAndInRange(newV))
                 {
                     _updatingPref = true;
@@ -96,13 +131,10 @@ namespace Time_Never_Stops
                     cfgCategory.SaveToFile(false);
                     _updatingPref = false;
                 }
-
                 ApplyDaySpeed(clamped);
             });
 
-            // Watch sleep state instead of binding to (non-event) fields.
-            MelonCoroutines.Start(SleepStateWatcher());
-
+            // Always run multiplier loop
             MelonCoroutines.Start(SetDaySpeedLoop());
         }
 
@@ -110,42 +142,20 @@ namespace Time_Never_Stops
         {
             bool last = false;
             TimeManager lastTm = null;
-
             while (true)
             {
-                // Wait for TimeManager instance
-                while (TimeManager.Instance == null)
-                {
-                    lastTm = null;
-                    last = false;
-                    yield return null;
-                }
-
+                while (TimeManager.Instance == null) { lastTm = null; last = false; yield return null; }
                 var tm = TimeManager.Instance;
-
-                // Reset tracking if instance changed
-                if (tm != lastTm)
-                {
-                    lastTm = tm;
-                    last = tm.SleepInProgress;
-                }
-
+                if (tm != lastTm) { lastTm = tm; last = tm.SleepInProgress; }
                 bool cur = tm.SleepInProgress;
-                if (cur && !last)
-                    OnSleepStart();
-                else if (!cur && last)
-                    OnSleepEnd();
-
+                if (cur && !last) OnSleepStart();
+                else if (!cur && last) OnSleepEnd();
                 last = cur;
-                yield return null; // per-frame; change to new WaitForSeconds(0.25f) if you prefer
+                yield return null;
             }
         }
 
-        private void OnSleepStart()
-        {
-            Patch_Tick_XPMenu.SuppressDuringSleep(true);
-        }
-
+        private void OnSleepStart() => Patch_Tick_XPMenu.SuppressDuringSleep(true);
         private void OnSleepEnd()
         {
             Patch_Tick_XPMenu.SuppressDuringSleep(false);
@@ -167,28 +177,22 @@ namespace Time_Never_Stops
         private IEnumerator SetDaySpeedLoop()
         {
             var tick = new WaitForSeconds(1f);
-
             while (true)
             {
                 while (TimeManager.Instance == null) yield return null;
-
                 var tm = TimeManager.Instance;
                 float last = ReadPrefAndNormalize();
                 ApplyDaySpeed(last);
-
                 int i = 0;
                 while (TimeManager.Instance == tm)
                 {
-                    if ((i++ % 2) == 0) cfgCategory.LoadFromFile(false);
-
+                    if ((i++ & 1) == 0) cfgCategory.LoadFromFile(false);
                     float desired = ReadPrefAndNormalize();
-
                     if (Differs(desired, last) || Differs(desired, tm.TimeProgressionMultiplier))
                     {
                         last = desired;
                         ApplyDaySpeed(last);
                     }
-
                     yield return tick;
                 }
             }
@@ -197,8 +201,7 @@ namespace Time_Never_Stops
             {
                 var raw = ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed);
                 var val = Sanitize(float.IsFinite(raw) ? raw : DefaultSpeed);
-
-                var s = val.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var s = val.ToString(CultureInfo.InvariantCulture);
                 if (cfgDaySpeedStr.Value != s)
                 {
                     cfgDaySpeedStr.Value = s;
@@ -207,15 +210,13 @@ namespace Time_Never_Stops
                 return val;
             }
 
-            static bool Differs(float a, float b, float eps = 1e-4f)
-                => Mathf.Abs(a - b) > eps;
+            static bool Differs(float a, float b, float eps = 1e-4f) => Mathf.Abs(a - b) > eps;
         }
 
         private static void ApplyDaySpeed(float newSpeed)
         {
             var tm = TimeManager.Instance;
             if (tm == null) return;
-
             var safe = Sanitize(newSpeed);
             if (Mathf.Abs(tm.TimeProgressionMultiplier - safe) > 0.0001f)
             {
@@ -227,7 +228,6 @@ namespace Time_Never_Stops
         private IEnumerator WatchSummaryToggle()
         {
             var tick = new WaitForSeconds(1f);
-
             while (true)
             {
                 bool cur = cfgEnableSummaryAwake.Value;
@@ -237,7 +237,6 @@ namespace Time_Never_Stops
                     cfgCategory.SaveToFile(false);
                     MelonLogger.Msg($"EnableDailySummaryAwake: {(cur ? "ON" : "OFF")}");
                 }
-
                 yield return tick;
             }
         }
@@ -245,10 +244,8 @@ namespace Time_Never_Stops
 
     public static class PatchLogger
     {
-        public static void LogPatchLoad(string patchName)
-        {
+        public static void LogPatchLoad(string patchName) =>
             MelonLogger.Msg($"[Harmony] {patchName} loaded.");
-        }
     }
 
     [HarmonyPatch(typeof(TimeManager), "Tick")]
@@ -276,34 +273,28 @@ namespace Time_Never_Stops
         [HarmonyPrefix]
         public static bool Prefix(TimeManager __instance)
         {
+            if (Core.cfgMultiplierOnly?.Value == true)
+                return true; // vanilla behavior when multiplier-only mode
+
             bool wouldFreeze = (__instance.CurrentTime == 400) ||
                                (__instance.IsCurrentTimeWithinRange(400, 600) && !GameManager.IS_TUTORIAL);
+            if (!wouldFreeze) return true;
 
-            if (!wouldFreeze)
-                return true;
-
-            if ((UnityEngine.Object)Player.Local == (UnityEngine.Object)null)
+            if ((UnityEngine.Object)Player.Local == null)
             {
-                MelonLogger.Warning("Local player does not exist. Waiting for player to spawn.");
+                MelonLogger.Warning("Local player does not exist. Waiting for player spawn.");
                 return false;
             }
 
-            __instance.TimeOnCurrentMinute = 0.0f;
-            try
-            {
-                __instance.StartCoroutine(__instance.StaggeredMinPass(
-                    1.0f / (__instance.TimeProgressionMultiplier * Time.timeScale)));
-            }
-            catch (System.Exception ex)
-            {
-                MelonLogger.Error($"Error invoking onMinutePass: {ex.Message}\nStack Trace: {ex.StackTrace}");
-            }
+            TMAccess.SetTimeOnCurrentMinute(__instance, 0f);
+            TMAccess.TryStartStaggeredMinPass(__instance,
+                1.0f / (__instance.TimeProgressionMultiplier * Time.timeScale));
 
             if (__instance.CurrentTime == 2359)
             {
-                ++__instance.ElapsedDays;
-                __instance.CurrentTime = 0;
-                __instance.DailyMinTotal = 0;
+                TMAccess.SetElapsedDays(__instance, __instance.ElapsedDays + 1);
+                TMAccess.SetCurrentTime(__instance, 0);
+                TMAccess.SetDailyMinTotal(__instance, 0);
                 __instance.onDayPass?.Invoke();
                 __instance.onHourPass?.Invoke();
                 if (__instance.CurrentDay == EDay.Monday)
@@ -311,15 +302,15 @@ namespace Time_Never_Stops
             }
             else if (__instance.CurrentTime % 100 >= 59)
             {
-                __instance.CurrentTime += 41;
+                TMAccess.SetCurrentTime(__instance, __instance.CurrentTime + 41);
                 __instance.onHourPass?.Invoke();
             }
             else
             {
-                ++__instance.CurrentTime;
+                TMAccess.SetCurrentTime(__instance, __instance.CurrentTime + 1);
             }
 
-            __instance.DailyMinTotal = TimeManager.GetMinSumFrom24HourTime(__instance.CurrentTime);
+            TMAccess.SetDailyMinTotal(__instance, TimeManager.GetMinSumFrom24HourTime(__instance.CurrentTime));
             __instance.HasChanged = true;
             if (__instance.ElapsedDays == 0 && __instance.CurrentTime == 2000 && __instance.onFirstNight != null)
                 __instance.onFirstNight.Invoke();
@@ -330,11 +321,14 @@ namespace Time_Never_Stops
         [HarmonyPostfix]
         public static void Postfix(TimeManager __instance)
         {
+            if (Core.cfgMultiplierOnly?.Value == true)
+                return;
+
             bool enableSummaryAwake = Core.cfgEnableSummaryAwake?.Value ?? true;
-            if (!InstanceFinder.IsHost || GameManager.IS_TUTORIAL || !enableSummaryAwake) return;
+            if (!FishyNet.InstanceFinder.IsHost || GameManager.IS_TUTORIAL || !enableSummaryAwake) return;
             if (__instance.SleepInProgress || suppressForSleep) return;
 
-            var ds = NetworkSingleton<DailySummary>.Instance;
+            var ds = DevUtilities.NetworkSingleton<DailySummary>.Instance;
             if (ds != null && ds.IsOpen) return;
 
             if (startupSkip)
@@ -357,13 +351,13 @@ namespace Time_Never_Stops
             lastHHmm = hhmm;
         }
 
-        private static System.Collections.IEnumerator ShowDailySummaryRoutine(TimeManager tm)
+        private static IEnumerator ShowDailySummaryRoutine(TimeManager tm)
         {
             busy = true;
             tm.ResetHostSleepDone();
 
-            var ds = NetworkSingleton<DailySummary>.Instance;
-            var hud = Singleton<HUD>.Instance;
+            var ds = DevUtilities.NetworkSingleton<DailySummary>.Instance;
+            var hud = DevUtilities.Singleton<HUD>.Instance;
             if (ds == null || ds.IsOpen) { busy = false; yield break; }
 
             if (hud != null) hud.canvas.enabled = false;
@@ -380,8 +374,7 @@ namespace Time_Never_Stops
             }
 
             ds.Open();
-            while (ds.IsOpen)
-                yield return null;
+            while (ds.IsOpen) yield return null;
 
             var rankCanvas = UnityEngine.Object.FindObjectOfType<RankUpCanvas>(true);
             if (rankCanvas != null)
@@ -391,40 +384,89 @@ namespace Time_Never_Stops
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
                 Time.timeScale = 1f;
-
-                while (rankCanvas.IsRunning)
-                    yield return null;
+                while (rankCanvas.IsRunning) yield return null;
             }
 
             tm.MarkHostSleepDone();
-
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
-            if (hud != null)
-            {
-                hud.canvas.enabled = true;
-            }
+            if (hud != null) hud.canvas.enabled = true;
             else
             {
-                hud = Singleton<HUD>.Instance;
-                if (hud != null)
-                    hud.canvas.enabled = true;
-                else
-                    MelonLogger.Warning("HUD not found. Cannot restore HUD canvas.");
+                hud = DevUtilities.Singleton<HUD>.Instance;
+                if (hud != null) hud.canvas.enabled = true;
+                else MelonLogger.Warning("HUD not found. Cannot restore HUD canvas.");
             }
-
             busy = false;
         }
     }
 
     [HarmonyPatch(typeof(HUD), "Update")]
-    [HarmonyPriority(HarmonyLib.Priority.Low)]
+    [HarmonyPriority(Priority.Low)]
     public static class Patch_HUD_HideSleepPrompt
     {
         static void Postfix(HUD __instance)
         {
-            if (__instance != null && __instance.SleepPrompt != null)
+            if (Core.cfgMultiplierOnly?.Value == true) return; // disabled in multiplier-only mode
+            if (__instance?.SleepPrompt != null)
                 __instance.SleepPrompt.gameObject.SetActive(false);
         }
     }
+
+#if MONO
+    internal static class TMAccess
+    {
+        private static readonly Action<TimeManager, int> _setCurrentTime;
+        private static readonly Action<TimeManager, int> _setElapsedDays;
+        private static readonly Action<TimeManager, int> _setDailyMinTotal;
+        private static readonly Action<TimeManager, float> _setTimeOnCurrentMinute;
+        private static readonly MethodInfo _staggeredMinPass;
+
+        static TMAccess()
+        {
+            _setCurrentTime       = BuildSetter<int>("CurrentTime");
+            _setElapsedDays       = BuildSetter<int>("ElapsedDays");
+            _setDailyMinTotal     = BuildSetter<int>("DailyMinTotal");
+            _setTimeOnCurrentMinute = BuildSetter<float>("TimeOnCurrentMinute");
+            _staggeredMinPass     = AccessTools.Method(typeof(TimeManager), "StaggeredMinPass");
+        }
+
+        private static Action<TimeManager, T> BuildSetter<T>(string propName)
+        {
+            var setter = AccessTools.PropertySetter(typeof(TimeManager), propName);
+            if (setter == null) return (_, __) => { };
+            return (Action<TimeManager, T>)Delegate.CreateDelegate(typeof(Action<TimeManager, T>), null, setter);
+        }
+
+        public static void SetCurrentTime(TimeManager tm, int v)         => _setCurrentTime(tm, v);
+        public static void SetElapsedDays(TimeManager tm, int v)         => _setElapsedDays(tm, v);
+        public static void SetDailyMinTotal(TimeManager tm, int v)       => _setDailyMinTotal(tm, v);
+        public static void SetTimeOnCurrentMinute(TimeManager tm, float v)=> _setTimeOnCurrentMinute(tm, v);
+
+        public static void TryStartStaggeredMinPass(TimeManager tm, float arg)
+        {
+            if (_staggeredMinPass == null) return;
+            try
+            {
+                var enumerator = _staggeredMinPass.Invoke(tm, new object[] { arg }) as IEnumerator;
+                if (enumerator != null)
+                    tm.StartCoroutine(enumerator);
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"Could not invoke StaggeredMinPass (Mono): {ex.Message}");
+            }
+        }
+    }
+#else
+    internal static class TMAccess
+    {
+        public static void SetCurrentTime(TimeManager tm, int v)          => tm.CurrentTime = v;
+        public static void SetElapsedDays(TimeManager tm, int v)          => tm.ElapsedDays = v;
+        public static void SetDailyMinTotal(TimeManager tm, int v)        => tm.DailyMinTotal = v;
+        public static void SetTimeOnCurrentMinute(TimeManager tm, float v)=> tm.TimeOnCurrentMinute = v;
+        public static void TryStartStaggeredMinPass(TimeManager tm, float arg) =>
+            tm.StartCoroutine(tm.StaggeredMinPass(arg));
+    }
+#endif
 }

@@ -1,33 +1,43 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-	<PropertyGroup>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>disable</Nullable>
-		<RootNamespace>Time Never Stops SLN</RootNamespace> <!--Change this-->
-		<LangVersion>default</LangVersion>
-		<IsPackable>false</IsPackable>
-		<AssemblyVersion>1.0.0.0</AssemblyVersion>
-		<FileVersion>1.2.1</FileVersion>
-		<NeutralLanguage>en-US</NeutralLanguage>
-		<LangVersion>latest</LangVersion>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Configurations>MONO;IL2CPP</Configurations>
-	</PropertyGroup>
+  <Import Project="..\Version.props" />
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Time_Never_Stops</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <!-- Removed hard-coded Version / AssemblyVersion / FileVersion (now come from Version.props) -->
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Configurations>IL2CPP;MONO</Configurations>
+    <Deterministic>true</Deterministic>
+    <Version>$(ModVersion)</Version>
+  </PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)' == 'MONO'">
-		<TargetFramework>netstandard2.1</TargetFramework>
-		<AssemblyName>TimeNeverStops_Mono</AssemblyName> <!--Change this-->
-	</PropertyGroup>
+  <!-- MONO build -->
+  <PropertyGroup Condition="'$(Configuration)'=='MONO'">
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>TimeNeverStops_Mono</AssemblyName>
+    <DefineConstants>TRACE;MONO</DefineConstants>
+  </PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)' == 'IL2CPP'">
-		<TargetFramework>net6.0</TargetFramework>
-		<AssemblyName>TimeNeverStops_IL2Cpp</AssemblyName> <!--Change this-->
-	</PropertyGroup>
-	<PropertyGroup Condition="'$(Configuration)' == 'MONO'">
-		<S1Dir>D:\Program Files\Steam App\steamapps\common\Schedule 1 Mono</S1Dir> <!--Change this-->
-	</PropertyGroup>
-	<PropertyGroup Condition="'$(Configuration)' == 'IL2CPP'">
-		<S1Dir>D:\Program Files\Steam App\steamapps\common\Schedule I Test</S1Dir> <!--Change this-->
-	</PropertyGroup>
+  <!-- IL2CPP build -->
+  <PropertyGroup Condition="'$(Configuration)'=='IL2CPP'">
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>TimeNeverStops_IL2Cpp</AssemblyName>
+    <DefineConstants>TRACE;IL2CPP</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='MONO'">
+    <S1Dir>D:\Program Files\Steam App\steamapps\common\Schedule 1 Mono</S1Dir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='IL2CPP'">
+    <S1Dir>D:\Program Files\Steam App\steamapps\common\Schedule I Test</S1Dir>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>obj\$(Configuration)\</BaseIntermediateOutputPath>
+    <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
+  </PropertyGroup>
 
   <ItemDefinitionGroup>
     <Reference>
@@ -35,8 +45,7 @@
     </Reference>
   </ItemDefinitionGroup>
 
-
-	<ItemGroup Condition="'$(Configuration)' == 'MONO'">
+  <ItemGroup Condition="'$(Configuration)' == 'MONO'">
 		<Reference Include="AeLa.EasyFeedback.Demo">
 			<HintPath>$(S1Dir)\Schedule I_Data\Managed\AeLa.EasyFeedback.Demo.dll</HintPath>
 		</Reference>
@@ -63,12 +72,6 @@
 		</Reference>
 		<Reference Include="Autodesk.Fbx">
 			<HintPath>$(S1Dir)\Schedule I_Data\Managed\Autodesk.Fbx.dll</HintPath>
-		</Reference>
-		<Reference Include="Boxophobic.AtmosphericHeightFog.Runtime">
-			<HintPath>$(S1Dir)\Schedule I_Data\Managed\Boxophobic.AtmosphericHeightFog.Runtime.dll</HintPath>
-		</Reference>
-		<Reference Include="Boxophobic.Utils.Scripts">
-			<HintPath>$(S1Dir)\Schedule I_Data\Managed\Boxophobic.Utils.Scripts.dll</HintPath>
 		</Reference>
 		<Reference Include="Cinemachine">
 			<HintPath>$(S1Dir)\Schedule I_Data\Managed\Cinemachine.dll</HintPath>
@@ -511,12 +514,6 @@
 		<Reference Include="Il2CppAstarPathfindingProject">
 			<HintPath>$(S1Dir)\MelonLoader\Il2CppAssemblies\Il2CppAstarPathfindingProject.dll</HintPath>
 		</Reference>
-		<Reference Include="Il2CppBoxophobic.AtmosphericHeightFog.Runtime">
-			<HintPath>$(S1Dir)\MelonLoader\Il2CppAssemblies\Il2CppBoxophobic.AtmosphericHeightFog.Runtime.dll</HintPath>
-		</Reference>
-		<Reference Include="Il2CppBoxophobic.Utils.Scripts">
-			<HintPath>$(S1Dir)\MelonLoader\Il2CppAssemblies\Il2CppBoxophobic.Utils.Scripts.dll</HintPath>
-		</Reference>
 		<Reference Include="Il2CppCinemachine">
 			<HintPath>$(S1Dir)\MelonLoader\Il2CppAssemblies\Il2CppCinemachine.dll</HintPath>
 		</Reference>
@@ -932,7 +929,7 @@
 	</ItemGroup>
 
 	<PropertyGroup>
-		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<EnableDefaultCompileItems>false</EnableDefaultCompileItems>
 	</PropertyGroup>
 
@@ -959,7 +956,51 @@
 		<Publicize Include="Assembly-CSharp:ScheduleOne.NPCs.NPC.Start" />
 	</ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="D:\Program Files\Steam App\steamapps\common\Schedule I Test\Mods\" />
+  <Target Name="PostBuild" AfterTargets="Build"
+          Condition="'$(Configuration)'=='IL2CPP' AND Exists('$(S1Dir)\Mods')">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(S1Dir)\Mods\" />
+  </Target>
+  <ItemGroup Condition="'$(Configuration)'=='MONO'">
+		<None Remove="Libs\MelonLoader\Il2CppAssemblies\**\*.*" />
+	</ItemGroup>
+
+  <!-- Inline task to generate VersionInfo.g.cs -->
+  <UsingTask TaskName="GenerateVersionInfoTask"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+
+    <ParameterGroup>
+      <FilePath ParameterType="System.String" Required="true" />
+      <Version  ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+					var dir = Path.GetDirectoryName(FilePath);
+					if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+							Directory.CreateDirectory(dir);
+
+					var content =
+					@"// <auto-generated/> Do not edit. Source: Version.props
+					namespace Time_Never_Stops;
+					internal static class BuildVersion
+					{
+							internal const string Value = """ + Version + @""";
+					}";	
+								File.WriteAllText(FilePath, content);
+				]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="GenerateVersionInfo" BeforeTargets="BeforeCompile">
+    <GenerateVersionInfoTask FilePath="$(IntermediateOutputPath)VersionInfo.g.cs"
+                             Version="$(Version)" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)VersionInfo.g.cs" AutoGen="True" />
+    </ItemGroup>
   </Target>
 </Project>
