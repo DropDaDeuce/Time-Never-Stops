@@ -1,4 +1,17 @@
-﻿# Changelog
+# Changelog
+
+## [1.4.0] - Stop Breaking Things Update - 2025-09-12
+### Added
+- Config option `EnableDebugLogging` (`cfgDebugLogging`) to selectively emit detailed diagnostic messages without cluttering normal logs.
+
+### Changed
+- Run ForceSleep at 6:59 to ensure all game mechanics that rely on sleep events can run properly.
+    - Added many patches to ensure mod functionality works correctly with this change and doesn't interfere with normal game behavior.
+- Refactored internal logging to use `TNSLog` static class for consistent formatting and easier future enhancements.
+- All debug output (detailed internal state changes, config reloads, etc.) is now conditional on the new `EnableDebugLogging` setting.
+
+### Notes
+- Thank you **bigjme** for the bug report!
 
 ## 1.3.0 - Multiplier Only Mode, Mono Build & Quality Pass - 2025-08-30
 ### Added

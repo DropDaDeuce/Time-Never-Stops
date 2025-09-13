@@ -1,4 +1,4 @@
-[config]
+﻿[config]
 schemaVersion = "0.0.1"
 
 [general]
@@ -7,7 +7,7 @@ repository = "https://thunderstore.io"
 [package]
 namespace = "DropDaDeuce"
 name = "TimeNeverStops_Mono"
-versionNumber = "1.3.0"
+versionNumber = "1.4.0"
 description = "Time no longer stops at 4AM. Configurable day speed multiplier. (Mono build)"
 websiteUrl = "https://github.com/DropDaDeuce/Time-Never-Stops"
 containsNsfwContent = false

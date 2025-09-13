@@ -2,31 +2,38 @@
 using System.Collections;
 using System.Globalization;
 using System.Reflection;
+using System.IO;
 using HarmonyLib;
 using MelonLoader;
 using MelonLoader.Utils;
 using UnityEngine;
+using static MelonLoader.MelonLogger;
+
 
 #if IL2CPP
 using TimeManager = Il2CppScheduleOne.GameTime.TimeManager;
 using EDay = Il2CppScheduleOne.GameTime.EDay;
 using Player = Il2CppScheduleOne.PlayerScripts.Player;
+using PlayerScript = Il2CppScheduleOne.PlayerScripts;
 using HUD = Il2CppScheduleOne.UI.HUD;
-using DailySummary = Il2CppScheduleOne.UI.DailySummary;
-using RankUpCanvas = Il2CppScheduleOne.UI.RankUpCanvas;
+using UI = Il2CppScheduleOne.UI;
 using GameManager = Il2CppScheduleOne.DevUtilities.GameManager;
 using DevUtilities = Il2CppScheduleOne.DevUtilities;
-using FishyNet = Il2CppFishNet;
+using PlayerCamera = Il2CppScheduleOne.PlayerScripts.PlayerCamera;
+using SleepCanvas = Il2CppScheduleOne.UI.SleepCanvas;
+using Employee = Il2CppScheduleOne.Employees.Employee;
 #else // MONO
 using TimeManager = ScheduleOne.GameTime.TimeManager;
 using EDay = ScheduleOne.GameTime.EDay;
 using Player = ScheduleOne.PlayerScripts.Player;
+using PlayerScript = ScheduleOne.PlayerScripts;
 using HUD = ScheduleOne.UI.HUD;
-using DailySummary = ScheduleOne.UI.DailySummary;
-using RankUpCanvas = ScheduleOne.UI.RankUpCanvas;
+using UI = ScheduleOne.UI;
 using GameManager = ScheduleOne.DevUtilities.GameManager;
 using DevUtilities = ScheduleOne.DevUtilities;
-using FishyNet = FishNet;
+using PlayerCamera = ScheduleOne.PlayerScripts.PlayerCamera;
+using SleepCanvas = ScheduleOne.UI.SleepCanvas;
+using Employee = ScheduleOne.Employees.Employee;
 #endif
 
 [assembly: MelonInfo(typeof(Time_Never_Stops.Core), "Time Never Stops", Time_Never_Stops.BuildVersion.Value, "DropDaDeuce", null)]
@@ -34,13 +41,44 @@ using FishyNet = FishNet;
 
 namespace Time_Never_Stops
 {
+    internal static class TNSLog
+    {
+        // Toggle comes from config.
+        private static bool DebugEnabled => Core.cfgDebugLogging?.Value == true;
+
+        // Info
+        public static void Msg(string message) => MelonLogger.Msg(message);
+        public static void Msg(string format, params object[] args) => MelonLogger.Msg(string.Format(format, args));
+
+        // Debug (hidden unless enabled)
+        public static void Debug(string message)
+        {
+            if (DebugEnabled)
+                MelonLogger.Msg($"[Debug] {message}");
+        }
+        public static void Debug(string format, params object[] args)
+        {
+            if (DebugEnabled)
+                MelonLogger.Msg("[Debug] " + string.Format(format, args));
+        }
+
+        // Warning
+        public static void Warning(string message) => MelonLogger.Warning(message);
+        public static void Warning(string format, params object[] args) => MelonLogger.Warning(string.Format(format, args));
+
+        // Error
+        public static void Error(string message) => MelonLogger.Error(message);
+        public static void Error(string format, params object[] args) => MelonLogger.Error(string.Format(format, args));
+    }
+
     public class Core : MelonMod
     {
         private MelonPreferences_Category cfgCategory;
         private MelonPreferences_Entry<string> cfgDaySpeedStr;
-        public  static MelonPreferences_Entry<bool> cfgEnableSummaryAwake;
+        public static MelonPreferences_Entry<bool> cfgEnableSummaryAwake;
         private MelonPreferences_Entry<float> cfgLegacyDaySpeed;
-        public  static MelonPreferences_Entry<bool> cfgMultiplierOnly; // NEW
+        public static MelonPreferences_Entry<bool> cfgMultiplierOnly; // NEW
+        public static MelonPreferences_Entry<bool> cfgDebugLogging; // NEW
 
         private bool _updatingPref;
         private bool _lastEnableSummaryAwake;
@@ -48,6 +86,10 @@ namespace Time_Never_Stops
         private const float DefaultSpeed = 1.0f;
         private const float MinSpeed = 0.1f;
         private const float MaxSpeed = 100.0f;
+
+        // New: file watcher to avoid polling disk every second
+        private FileSystemWatcher _cfgWatcher;
+        private volatile bool _cfgFileChanged;
 
         public override void OnInitializeMelon()
         {
@@ -62,7 +104,7 @@ namespace Time_Never_Stops
             legacyCat.DeleteEntry("DaySpeedMultiplier");
 
             if (cfgLegacyDaySpeed.Value != DefaultSpeed)
-                MelonLogger.Warning($"Legacy DaySpeedMultiplier found with value {cfgLegacyDaySpeed.Value}. Migrating to new config system.");
+                TNSLog.Warning($"Legacy DaySpeedMultiplier found with value {cfgLegacyDaySpeed.Value}. Migrating to new config system.");
 
             string migratedDefaultStr = Math.Clamp(cfgLegacyDaySpeed.Value, MinSpeed, MaxSpeed)
                                             .ToString("R", CultureInfo.InvariantCulture);
@@ -100,21 +142,29 @@ namespace Time_Never_Stops
                     "If enabled, the daily summary will be shown while awake (unless Multiplier Only Mode is ON).",
                     false, false);
 
+            cfgDebugLogging = cfgCategory.GetEntry<bool>("EnableDebugLogging")
+                ?? cfgCategory.CreateEntry(
+                    "EnableDebugLogging",
+                    false,
+                    "Enable Debug Logging",
+                    "If true, prints additional debug messages from the mod to help diagnose issues.",
+                    false, false);
+
             if (!cfgMultiplierOnly.Value)
             {
                 _lastEnableSummaryAwake = cfgEnableSummaryAwake.Value;
-                MelonCoroutines.Start(WatchSummaryToggle());
                 MelonCoroutines.Start(SleepStateWatcher());
             }
             else
             {
-                MelonLogger.Msg("TimeMultiplierOnlyMode enabled: all non-multiplier features disabled.");
+                TNSLog.Msg("TimeMultiplierOnlyMode enabled: all non-multiplier features disabled.");
             }
 
             var initial = Sanitize(ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed));
             if (!IsStringValidAndInRange(cfgDaySpeedStr.Value))
                 cfgDaySpeedStr.Value = initial.ToString(CultureInfo.InvariantCulture);
 
+            // Debounced initial save
             _updatingPref = true;
             cfgCategory.SaveToFile();
             _updatingPref = false;
@@ -134,8 +184,54 @@ namespace Time_Never_Stops
                 ApplyDaySpeed(clamped);
             });
 
+            cfgEnableSummaryAwake.OnEntryValueChanged.Subscribe((_, newVal) =>
+            {
+                if (_updatingPref) return;
+                _lastEnableSummaryAwake = newVal;
+                TNSLog.Msg($"EnableDailySummaryAwake: {(newVal ? "ON" : "OFF")}");
+                _updatingPref = true;
+                cfgCategory.SaveToFile(false);
+                _updatingPref = false;
+            });
+
+            cfgDebugLogging.OnEntryValueChanged.Subscribe((_, newVal) =>
+            {
+                if (_updatingPref) return;
+                cfgDebugLogging.Value = newVal;
+                TNSLog.Msg($"DebugLogging: {(newVal ? "Enabled" : "Disabled")}");
+                _updatingPref = true;
+                cfgCategory.SaveToFile(false);
+                _updatingPref = false;
+            });
+
+            // Setup file watcher to react to external config edits without tight polling
+            try
+            {
+                _cfgWatcher = new FileSystemWatcher(cfgDir, Path.GetFileName(cfgFile))
+                {
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName,
+                    IncludeSubdirectories = false,
+                    EnableRaisingEvents = true
+                };
+                FileSystemEventHandler markDirty = (_, __) => _cfgFileChanged = true;
+                RenamedEventHandler markDirtyRename = (_, __) => _cfgFileChanged = true;
+                _cfgWatcher.Changed += markDirty;
+                _cfgWatcher.Created += markDirty;
+                _cfgWatcher.Renamed += markDirtyRename;
+            }
+            catch (Exception ex)
+            {
+                TNSLog.Warning($"Config watcher init failed: {ex.Message}. Falling back to in-process updates only.");
+            }
+
             // Always run multiplier loop
             MelonCoroutines.Start(SetDaySpeedLoop());
+        }
+
+        public override void OnDeinitializeMelon()
+        {
+            try { _cfgWatcher?.Dispose(); } catch { /* ignore */ }
+            _cfgWatcher = null;
         }
 
         private IEnumerator SleepStateWatcher()
@@ -155,11 +251,18 @@ namespace Time_Never_Stops
             }
         }
 
-        private void OnSleepStart() => Patch_Tick_XPMenu.SuppressDuringSleep(true);
+        private void OnSleepStart()
+        {
+            Patch_Tick_XPMenu.SuppressDuringSleep(true);
+            TNSLog.Debug("Sleep start");
+        }
         private void OnSleepEnd()
         {
+            Patch_SleepCanvas_SleepStart.StopRoutine();
             Patch_Tick_XPMenu.SuppressDuringSleep(false);
             Patch_Tick_XPMenu.MarkHandledForToday();
+            Patch_Tick_XPMenu.EnsureHUDReset();
+            TNSLog.Debug("Sleep end -> PaidForToday reset path should run on employees");
         }
 
         private static bool TryParseFloatInvariant(string s, out float value) =>
@@ -176,23 +279,31 @@ namespace Time_Never_Stops
 
         private IEnumerator SetDaySpeedLoop()
         {
-            var tick = new WaitForSeconds(1f);
+            // Use realtime so timeScale changes do not stall preference enforcement
+            var tick = new WaitForSecondsRealtime(1f);
             while (true)
             {
                 while (TimeManager.Instance == null) yield return null;
                 var tm = TimeManager.Instance;
                 float last = ReadPrefAndNormalize();
                 ApplyDaySpeed(last);
-                int i = 0;
+
                 while (TimeManager.Instance == tm)
                 {
-                    if ((i++ & 1) == 0) cfgCategory.LoadFromFile(false);
+                    // Reload if external edits occurred
+                    if (_cfgFileChanged)
+                    {
+                        _cfgFileChanged = false;
+                        cfgCategory.LoadFromFile(false);
+                    }
+
                     float desired = ReadPrefAndNormalize();
                     if (Differs(desired, last) || Differs(desired, tm.TimeProgressionMultiplier))
                     {
                         last = desired;
                         ApplyDaySpeed(last);
                     }
+
                     yield return tick;
                 }
             }
@@ -204,8 +315,10 @@ namespace Time_Never_Stops
                 var s = val.ToString(CultureInfo.InvariantCulture);
                 if (cfgDaySpeedStr.Value != s)
                 {
+                    _updatingPref = true;
                     cfgDaySpeedStr.Value = s;
                     cfgCategory.SaveToFile(false);
+                    _updatingPref = false;
                 }
                 return val;
             }
@@ -221,23 +334,7 @@ namespace Time_Never_Stops
             if (Mathf.Abs(tm.TimeProgressionMultiplier - safe) > 0.0001f)
             {
                 tm.TimeProgressionMultiplier = safe;
-                MelonLogger.Msg($"Day speed set to {safe:0.########}x");
-            }
-        }
-
-        private IEnumerator WatchSummaryToggle()
-        {
-            var tick = new WaitForSeconds(1f);
-            while (true)
-            {
-                bool cur = cfgEnableSummaryAwake.Value;
-                if (cur != _lastEnableSummaryAwake)
-                {
-                    _lastEnableSummaryAwake = cur;
-                    cfgCategory.SaveToFile(false);
-                    MelonLogger.Msg($"EnableDailySummaryAwake: {(cur ? "ON" : "OFF")}");
-                }
-                yield return tick;
+                TNSLog.Msg($"Day speed set to {safe:0.########}x");
             }
         }
     }
@@ -245,15 +342,16 @@ namespace Time_Never_Stops
     public static class PatchLogger
     {
         public static void LogPatchLoad(string patchName) =>
-            MelonLogger.Msg($"[Harmony] {patchName} loaded.");
+            TNSLog.Msg($"[Harmony] {patchName} loaded.");
     }
 
     [HarmonyPatch(typeof(TimeManager), "Tick")]
     [HarmonyPriority(Priority.High)]
     public static class Patch_Tick_XPMenu
     {
-        private static bool firedToday, busy;
+        private static bool firedToday;
         private static int lastHHmm;
+        private static int lastHH = -1;
         private static bool suppressForSleep;
         public static bool startupSkip = true;
 
@@ -282,7 +380,7 @@ namespace Time_Never_Stops
 
             if ((UnityEngine.Object)Player.Local == null)
             {
-                MelonLogger.Warning("Local player does not exist. Waiting for player spawn.");
+                TNSLog.Warning("Local player does not exist. Waiting for player spawn.");
                 return false;
             }
 
@@ -324,11 +422,12 @@ namespace Time_Never_Stops
             if (Core.cfgMultiplierOnly?.Value == true)
                 return;
 
-            bool enableSummaryAwake = Core.cfgEnableSummaryAwake?.Value ?? true;
-            if (!FishyNet.InstanceFinder.IsHost || GameManager.IS_TUTORIAL || !enableSummaryAwake) return;
+            if (lastHH != (int)(__instance.CurrentTime / 100)) { TNSLog.Debug($"Current Time: {__instance.CurrentTime} Current Day: {__instance.CurrentDay} Days Elapsed: {__instance.ElapsedDays}"); }
+            lastHH = (int)(__instance.CurrentTime / 100);
+
             if (__instance.SleepInProgress || suppressForSleep) return;
 
-            var ds = DevUtilities.NetworkSingleton<DailySummary>.Instance;
+            var ds = DevUtilities.NetworkSingleton<UI.DailySummary>.Instance;
             if (ds != null && ds.IsOpen) return;
 
             if (startupSkip)
@@ -342,62 +441,27 @@ namespace Time_Never_Stops
             int hhmm = __instance.CurrentTime;
             if (lastHHmm > hhmm) firedToday = false;
 
-            if (!firedToday && !busy && hhmm >= 700 && __instance.ElapsedDays >= 1)
+            if (!firedToday && __instance.CurrentTime > 658 && __instance.ElapsedDays > 0)
             {
-                MelonCoroutines.Start(ShowDailySummaryRoutine(__instance));
                 firedToday = true;
+                TNSLog.Debug("Forcing Sleep in code.");
+                TimeManager.Instance.ForceSleep();
             }
 
             lastHHmm = hhmm;
         }
 
-        private static IEnumerator ShowDailySummaryRoutine(TimeManager tm)
+        public static void EnsureHUDReset()
         {
-            busy = true;
-            tm.ResetHostSleepDone();
-
-            var ds = DevUtilities.NetworkSingleton<DailySummary>.Instance;
-            var hud = DevUtilities.Singleton<HUD>.Instance;
-            if (ds == null || ds.IsOpen) { busy = false; yield break; }
-
-            if (hud != null) hud.canvas.enabled = false;
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-            Time.timeScale = 1f;
-
-            var es = UnityEngine.EventSystems.EventSystem.current;
-            if (es == null)
-            {
-                var go = new GameObject("EventSystem");
-                go.AddComponent<UnityEngine.EventSystems.EventSystem>();
-                go.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
-            }
-
-            ds.Open();
-            while (ds.IsOpen) yield return null;
-
-            var rankCanvas = UnityEngine.Object.FindObjectOfType<RankUpCanvas>(true);
-            if (rankCanvas != null)
-            {
-                rankCanvas.StartEvent();
-                if (hud != null) hud.canvas.enabled = false;
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-                Time.timeScale = 1f;
-                while (rankCanvas.IsRunning) yield return null;
-            }
-
-            tm.MarkHostSleepDone();
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
-            if (hud != null) hud.canvas.enabled = true;
-            else
-            {
-                hud = DevUtilities.Singleton<HUD>.Instance;
-                if (hud != null) hud.canvas.enabled = true;
-                else MelonLogger.Warning("HUD not found. Cannot restore HUD canvas.");
-            }
-            busy = false;
+            Player.Local.CurrentBed = null;
+            Player.Local.SetReadyToSleep(ready: false);
+            DevUtilities.PlayerSingleton<PlayerCamera>.Instance.SetCanLook(c: true);
+            DevUtilities.PlayerSingleton<PlayerCamera>.Instance.StopTransformOverride(0f, reenableCameraLook: true, returnToOriginalRotation: false);
+            DevUtilities.PlayerSingleton<PlayerCamera>.Instance.LockMouse();
+            DevUtilities.PlayerSingleton<PlayerScript.PlayerInventory>.Instance.SetInventoryEnabled(enabled: true);
+            DevUtilities.Singleton<UI.InputPromptsCanvas>.Instance.UnloadModule();
+            DevUtilities.PlayerSingleton<PlayerScript.PlayerMovement>.Instance.canMove = true;
+            SleepCanvas.Instance.MenuContainer.gameObject.SetActive(false);
         }
     }
 
@@ -410,6 +474,145 @@ namespace Time_Never_Stops
             if (Core.cfgMultiplierOnly?.Value == true) return; // disabled in multiplier-only mode
             if (__instance?.SleepPrompt != null)
                 __instance.SleepPrompt.gameObject.SetActive(false);
+        }
+    }
+
+    [HarmonyPatch(typeof(UI.RankUpCanvas), "StartEvent")]
+    public static class Patch_RankUpCanvas_StartEvent
+    {
+        static Patch_RankUpCanvas_StartEvent() => PatchLogger.LogPatchLoad(nameof(Patch_RankUpCanvas_StartEvent));
+
+        [HarmonyPrefix]
+        public static bool PostFix(UI.RankUpCanvas __instance)
+        {
+            if (Core.cfgMultiplierOnly?.Value == false && Core.cfgEnableSummaryAwake?.Value == false)
+            {
+                TNSLog.Debug("Rank Up Canvas Skipping");
+                __instance.Canvas.enabled = false;
+                __instance.EndEvent();
+                return false; // Skip original method
+            }
+
+            TNSLog.Debug("Rank Up Canvas Running");
+            return true; // Run original method
+        }
+    }
+
+    [HarmonyPatch(typeof(UI.RegionUnlockedCanvas), "StartEvent")]
+    public static class Patch_RegionUnlockedCanvas_StartEvent
+    {
+        static Patch_RegionUnlockedCanvas_StartEvent() => PatchLogger.LogPatchLoad(nameof(Patch_RegionUnlockedCanvas_StartEvent));
+
+        [HarmonyPrefix]
+        public static bool PostFix(UI.RegionUnlockedCanvas __instance)
+        {
+            if (Core.cfgMultiplierOnly?.Value == false && Core.cfgEnableSummaryAwake?.Value == false)
+            {
+                TNSLog.Debug("Region Unlocked Canvas Skipping");
+                __instance.EndEvent();
+                return false; // Skip original method
+            }
+
+            TNSLog.Debug("Region Unlocked Canvas Running");
+            return true; // Run original method
+        }
+    }
+
+    [HarmonyPatch(typeof(UI.DailySummary))]
+    public static class DailySummaryPatch
+    {
+
+        [HarmonyPrefix]
+        [HarmonyPatch(nameof(UI.DailySummary.Open))]
+        public static bool OpenPrefix(UI.DailySummary __instance)
+        {
+            if (Core.cfgMultiplierOnly?.Value == false && Core.cfgEnableSummaryAwake?.Value == false)
+            {
+                TNSLog.Debug("Daily Summary Open Skipping");
+                return false; // This skips the original Open method
+            }
+            TNSLog.Debug("Daily Summary Open Running");
+            return true; // Run original method
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(nameof(UI.DailySummary.Close))]
+        public static bool ClosePrefix(UI.DailySummary __instance)
+        {
+            if (Core.cfgMultiplierOnly?.Value == false && Core.cfgEnableSummaryAwake?.Value == false)
+            {
+                TNSLog.Debug("Daily Summary Close Skipping");
+                return false; // This skips the original Close method
+            }
+            TNSLog.Debug("Daily Summary Close Running");
+            return true; // Run original method
+        }
+    }
+
+    [HarmonyPatch(typeof(SleepCanvas), "SleepStart")]
+    public static class Patch_SleepCanvas_SleepStart
+    {
+        // Small guard coroutine handle
+        private static object _routine;
+
+        [HarmonyPrefix]
+        public static void Prefix(SleepCanvas __instance)
+        {
+            if (Core.cfgMultiplierOnly?.Value == true) return; // disabled in multiplier-only mode
+
+            // Start a very short-lived coroutine that will survive through
+            // the original SleepStart body (which disables look).
+            if (_routine != null)
+                MelonCoroutines.Stop(_routine);
+
+            TNSLog.Debug("Running SleepStart Prefix.");
+
+            _routine = MelonCoroutines.Start(MakeThingsWorkRoutine(__instance));
+        }
+
+        public static void StopRoutine()
+        {
+            if (Core.cfgMultiplierOnly?.Value == true) return; // disabled in multiplier-only mode
+
+            // Stop the helper routine early (it will also end itself, this is just defensive).
+            if (_routine != null)
+            {
+                MelonCoroutines.Stop(_routine);
+                _routine = null;
+            }
+        }
+
+        private static IEnumerator MakeThingsWorkRoutine(SleepCanvas __instance)
+        {
+            const int frames = 3;
+            for (int i = 0; i < frames; i++)
+            {
+                MakeThingsWork(__instance);
+                yield return null;
+            }
+            _routine = null;
+        }
+
+        private static void MakeThingsWork(SleepCanvas __instance)
+        {
+            try
+            {
+                var cam = DevUtilities.PlayerSingleton<PlayerCamera>.Instance;
+                if (cam == null) return;
+
+                // Re-enable looking unconditionally.
+                cam.SetCanLook(true);
+
+                if (Core.cfgEnableSummaryAwake?.Value == false) { cam.LockMouse(); } else { cam.FreeMouse(); }
+                if (Core.cfgEnableSummaryAwake?.Value == false)
+                {
+                    SCAccess.LerpBlackOverlay(__instance, 0f, 0.1f);
+                }
+            }
+            catch (Exception ex)
+            {
+                TNSLog.Warning($"SleepStart look restore failed: {ex.Message}");
+            }
         }
     }
 
@@ -454,19 +657,83 @@ namespace Time_Never_Stops
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"Could not invoke StaggeredMinPass (Mono): {ex.Message}");
+                TNSLog.Warning($"Could not invoke StaggeredMinPass (Mono): {ex.Message}");
             }
         }
     }
 #else
     internal static class TMAccess
     {
-        public static void SetCurrentTime(TimeManager tm, int v)          => tm.CurrentTime = v;
-        public static void SetElapsedDays(TimeManager tm, int v)          => tm.ElapsedDays = v;
-        public static void SetDailyMinTotal(TimeManager tm, int v)        => tm.DailyMinTotal = v;
-        public static void SetTimeOnCurrentMinute(TimeManager tm, float v)=> tm.TimeOnCurrentMinute = v;
+        public static void SetCurrentTime(TimeManager tm, int v) => tm.CurrentTime = v;
+        public static void SetElapsedDays(TimeManager tm, int v) => tm.ElapsedDays = v;
+        public static void SetDailyMinTotal(TimeManager tm, int v) => tm.DailyMinTotal = v;
+        public static void SetTimeOnCurrentMinute(TimeManager tm, float v) => tm.TimeOnCurrentMinute = v;
         public static void TryStartStaggeredMinPass(TimeManager tm, float arg) =>
             tm.StartCoroutine(tm.StaggeredMinPass(arg));
     }
 #endif
+
+    internal static class SCAccess
+    {
+        private static readonly MethodInfo _lerpBlackOverlay =
+            AccessTools.Method(typeof(SleepCanvas), "LerpBlackOverlay", new[] { typeof(float), typeof(float) });
+
+        public static void LerpBlackOverlay(SleepCanvas inst, float transparency, float lerpTime)
+        {
+            if (_lerpBlackOverlay != null)
+            {
+                try
+                {
+                    _lerpBlackOverlay.Invoke(inst, new object[] { transparency, lerpTime });
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    TNSLog.Warning($"Invoke SleepCanvas.LerpBlackOverlay failed: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    // Debug helpers to verify sleep flow and employee payment.
+    [HarmonyPatch(typeof(TimeManager))]
+    public static class Debug_TimeManager_SleepFlow
+    {
+        [HarmonyPostfix, HarmonyPatch("ForceSleep")]
+        static void ForceSleep_Postfix(TimeManager __instance)
+            => TNSLog.Debug("ForceSleep invoked. SleepInProgress=" + __instance.SleepInProgress);
+
+        [HarmonyPostfix, HarmonyPatch("MarkHostSleepDone")]
+        static void MarkHostSleepDone_Postfix()
+            => TNSLog.Debug("Host sleep done marked.");
+
+        // If TimeManager exposes these, you can add postfixes as well:
+        // [HarmonyPostfix, HarmonyPatch("OnSleepStart")] etc.
+    }
+
+    [HarmonyPatch(typeof(Employee))]
+    public static class Debug_Employee_Pay
+    {
+        // Log when PaidForToday flips to true (when SetIsPaid is called).
+        [HarmonyPrefix, HarmonyPatch("SetIsPaid")]
+        static void SetIsPaid_Prefix(Employee __instance)
+            => TNSLog.Debug($"Paying {__instance.FirstName} {__instance.LastName} DailyWage={__instance.DailyWage}");
+
+        // Log the wage deduction source and amount.
+        [HarmonyPrefix, HarmonyPatch("RemoveDailyWage")]
+        static void RemoveDailyWage_Prefix(Employee __instance)
+        {
+            var home = __instance.GetHome();
+            float before = (home != null) ? home.GetCashSum() : -1f;
+            TNSLog.Debug($"Removing wage for {__instance.FirstName} {__instance.LastName}. HomeCashBefore={before}");
+        }
+
+        [HarmonyPostfix, HarmonyPatch("RemoveDailyWage")]
+        static void RemoveDailyWage_Postfix(Employee __instance)
+        {
+            var home = __instance.GetHome();
+            float after = (home != null) ? home.GetCashSum() : -1f;
+            TNSLog.Debug($"Wage removed. HomeCashAfter={after}");
+        }
+    }
 }

@@ -1,4 +1,4 @@
-﻿# Time Never Stops
+# Time Never Stops
 
 **A mod for Schedule I that keeps time moving and lets you control the in‑game day speed.**  
 Report issues on the GitHub repository or the modding Discord.
