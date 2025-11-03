@@ -254,13 +254,14 @@ namespace Time_Never_Stops
         private void OnSleepStart()
         {
             Patch_Tick_XPMenu.SuppressDuringSleep(true);
+            Patch_Tick_XPMenu.MarkHandledForToday(); // Mark BEFORE sleep sequence completes
             TNSLog.Debug("Sleep start");
         }
         private void OnSleepEnd()
         {
             Patch_SleepCanvas_SleepStart.StopRoutine();
             Patch_Tick_XPMenu.SuppressDuringSleep(false);
-            Patch_Tick_XPMenu.MarkHandledForToday();
+            Patch_Tick_XPMenu.ResetWakeUpProtection(); // Ensure flag is set after sleep ends
             Patch_Tick_XPMenu.EnsureHUDReset();
             TNSLog.Debug("Sleep end -> PaidForToday reset path should run on employees");
         }
@@ -354,6 +355,9 @@ namespace Time_Never_Stops
         private static int lastHH = -1;
         private static bool suppressForSleep;
         public static bool startupSkip = true;
+        private static int wakeUpWindowEnd = 710; // Don't trigger sleep between 700-710 (wake-up window)
+        private static float lastSleepEndTime = -1f; // Timestamp when sleep ended
+        private static float sleepCooldownSeconds = 30f; // Don't trigger sleep for 30 seconds after sleep ends
 
         static Patch_Tick_XPMenu()
         {
@@ -361,11 +365,30 @@ namespace Time_Never_Stops
             startupSkip = true;
         }
 
-        public static void SuppressDuringSleep(bool on) => suppressForSleep = on;
+        public static void SuppressDuringSleep(bool on)
+        {
+            suppressForSleep = on;
+            // Reset cooldown when sleep starts (allows normal sleep progression)
+            if (on)
+            {
+                lastSleepEndTime = -1f;
+            }
+        }
+        
         public static void MarkHandledForToday()
         {
             firedToday = true;
             lastHHmm = 700;
+            TNSLog.Debug($"MarkHandledForToday: firedToday={firedToday}, lastHHmm={lastHHmm}");
+        }
+        
+        public static void ResetWakeUpProtection()
+        {
+            // Reset the flag and lastHHmm to ensure wake-up window protection
+            firedToday = true;
+            lastHHmm = 700;
+            lastSleepEndTime = Time.realtimeSinceStartup;
+            TNSLog.Debug($"ResetWakeUpProtection: firedToday={firedToday}, lastHHmm={lastHHmm}, cooldown started");
         }
 
         [HarmonyPrefix]
@@ -427,8 +450,20 @@ namespace Time_Never_Stops
 
             if (__instance.SleepInProgress || suppressForSleep) return;
 
+            // Check if we're in the wake-up window (700-710) - early return
+            bool inWakeUpWindow = __instance.CurrentTime >= 700 && __instance.CurrentTime <= wakeUpWindowEnd;
+            
+            // Check if we're in cooldown period after sleep ended
+            bool inCooldown = lastSleepEndTime > 0 && (Time.realtimeSinceStartup - lastSleepEndTime) < sleepCooldownSeconds;
+            
+            if (inWakeUpWindow || inCooldown) return;
+
             var ds = DevUtilities.NetworkSingleton<UI.DailySummary>.Instance;
             if (ds != null && ds.IsOpen) return;
+
+            // Check if RankUpCanvas is running (another post-sleep UI)
+            var rankUpCanvas = UnityEngine.Object.FindObjectOfType<UI.RankUpCanvas>();
+            if (rankUpCanvas != null && rankUpCanvas.IsRunning) return;
 
             if (startupSkip)
             {
@@ -439,8 +474,14 @@ namespace Time_Never_Stops
             }
 
             int hhmm = __instance.CurrentTime;
-            if (lastHHmm > hhmm) firedToday = false;
+            // Only reset firedToday if time rolled back past midnight (new day started)
+            if (lastHHmm > hhmm && hhmm < 700) firedToday = false;
 
+            // Only trigger sleep if:
+            // 1. Not already fired today
+            // 2. Time is past 658 (6:58 AM)
+            // 3. Days elapsed > 0
+            // (Wake-up window and cooldown checks already done above)
             if (!firedToday && __instance.CurrentTime > 658 && __instance.ElapsedDays > 0)
             {
                 firedToday = true;
@@ -460,7 +501,7 @@ namespace Time_Never_Stops
             DevUtilities.PlayerSingleton<PlayerCamera>.Instance.LockMouse();
             DevUtilities.PlayerSingleton<PlayerScript.PlayerInventory>.Instance.SetInventoryEnabled(enabled: true);
             DevUtilities.Singleton<UI.InputPromptsCanvas>.Instance.UnloadModule();
-            DevUtilities.PlayerSingleton<PlayerScript.PlayerMovement>.Instance.canMove = true;
+            DevUtilities.PlayerSingleton<PlayerScript.PlayerMovement>.Instance.CanMove = true;
             SleepCanvas.Instance.MenuContainer.gameObject.SetActive(false);
         }
     }
