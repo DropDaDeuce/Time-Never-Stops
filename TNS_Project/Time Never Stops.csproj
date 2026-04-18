@@ -28,10 +28,10 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='MONO'">
-    <S1Dir>D:\Program Files\Steam App\steamapps\common\Schedule 1 Mono</S1Dir>
+    <S1Dir>D:\SteamLibrary\steamapps\common\Schedule I_alternate</S1Dir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='IL2CPP'">
-    <S1Dir>D:\Program Files\Steam App\steamapps\common\Schedule I Test</S1Dir>
+    <S1Dir>D:\SteamLibrary\steamapps\common\Schedule I_public</S1Dir>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -935,6 +935,7 @@
 
 	<ItemGroup>
 		<Compile Include="Core.cs" />
+		<Compile Include="TimeSyncManager.cs" />
 		<Compile Include="TemplateUtils\AssetBundleUtils.cs" />
 		<Folder Include="Libs\" />
 		<!--Uncomment if with assetbundle-->
@@ -947,6 +948,18 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
+	</ItemGroup>
+	
+	<!--SteamNetworkLib Reference-->
+	<ItemGroup Condition="'$(Configuration)' == 'MONO'">
+		<Reference Include="SteamNetworkLib">
+			<HintPath>Libs\SteamNetworkLib-Mono.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+	<ItemGroup Condition="'$(Configuration)' == 'IL2CPP'">
+		<Reference Include="SteamNetworkLib">
+			<HintPath>Libs\SteamNetworkLib-Il2Cpp.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 	<!--Publicizer Entries-->
 	<ItemGroup Condition="'$(Configuration)' == 'IL2CPP'">
