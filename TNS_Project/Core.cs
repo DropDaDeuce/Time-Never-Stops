@@ -91,6 +91,10 @@ namespace Time_Never_Stops
         private FileSystemWatcher _cfgWatcher;
         private volatile bool _cfgFileChanged;
 
+        // Time synchronization manager
+        private TimeSyncManager? _timeSyncManager;
+        private bool _timeSyncInitialized;
+
         public override void OnInitializeMelon()
         {
             var legacyCat = MelonPreferences.CreateCategory("TimeNeverStops");
@@ -182,6 +186,19 @@ namespace Time_Never_Stops
                     _updatingPref = false;
                 }
                 ApplyDaySpeed(clamped);
+                
+                // If host, sync multiplier to lobby immediately when changed
+                if (_timeSyncManager != null)
+                {
+                    try
+                    {
+                        _timeSyncManager.SyncHostMultiplierNow();
+                    }
+                    catch (Exception ex)
+                    {
+                        TNSLog.Warning($"Error syncing multiplier change to lobby: {ex.Message}");
+                    }
+                }
             });
 
             cfgEnableSummaryAwake.OnEntryValueChanged.Subscribe((_, newVal) =>
@@ -228,10 +245,42 @@ namespace Time_Never_Stops
             MelonCoroutines.Start(SetDaySpeedLoop());
         }
 
+        public override void OnSceneWasInitialized(int buildIndex, string sceneName)
+        {
+            // Initialize time synchronization when Menu scene loads (Steamworks should be ready by then)
+            if (sceneName == "Menu" && !_timeSyncInitialized)
+            {
+                _timeSyncInitialized = true;
+                try
+                {
+                    _timeSyncManager = new TimeSyncManager();
+                    
+                    // Set callback to get current multiplier value
+                    _timeSyncManager.SetHostMultiplierCallback(() =>
+                    {
+                        var parsed = ParseFloatOrDefault(cfgDaySpeedStr.Value, DefaultSpeed);
+                        return Sanitize(parsed);
+                    });
+                    
+                    _timeSyncManager.Initialize();
+                    MelonCoroutines.Start(TimeSyncUpdateLoop());
+                    TNSLog.Msg("Time synchronization enabled");
+                }
+                catch (Exception ex)
+                {
+                    TNSLog.Warning($"Failed to initialize time synchronization: {ex.Message}");
+                    // Continue without time sync - mod will still work
+                }
+            }
+        }
+
         public override void OnDeinitializeMelon()
         {
             try { _cfgWatcher?.Dispose(); } catch { /* ignore */ }
             _cfgWatcher = null;
+
+            try { _timeSyncManager?.Dispose(); } catch { /* ignore */ }
+            _timeSyncManager = null;
         }
 
         private IEnumerator SleepStateWatcher()
@@ -324,6 +373,25 @@ namespace Time_Never_Stops
             }
 
             static bool Differs(float a, float b, float eps = 1e-4f) => Mathf.Abs(a - b) > eps;
+        }
+
+        private IEnumerator TimeSyncUpdateLoop()
+        {
+            // Use realtime so timeScale changes do not stall update processing
+            var tick = new WaitForSecondsRealtime(0.1f); // Update every 100ms for responsive sync
+            while (true)
+            {
+                try
+                {
+                    _timeSyncManager?.Update();
+                }
+                catch (Exception ex)
+                {
+                    TNSLog.Warning($"Error in time sync update loop: {ex.Message}");
+                }
+
+                yield return tick;
+            }
         }
 
         private static void ApplyDaySpeed(float newSpeed)
