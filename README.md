@@ -2,7 +2,8 @@
 
 **A mod for Schedule I that keeps time moving and lets you control the in‑game day speed.**  
 Report issues on [GitHub](https://github.com/DropDaDeuce/Time-Never-Stops/issues).  
-Also on [Nexus Mods](https://www.nexusmods.com/schedule1/mods/1141).
+Also on [Nexus Mods](https://www.nexusmods.com/schedule1/mods/1141).  
+Ask on [Discord](https://discord.com/channels/1349221936470687764/1403303558232801433).
 
 ## Disclaimer
 - **AI Content:** This mod was created with assistance from AI tools. The icon was generated with ChatGPT v5.
@@ -55,11 +56,17 @@ You will see two Thunderstore packages / release files:
 - `TimeNeverStops_IL2Cpp.dll` (IL2CPP build)
 - `TimeNeverStops_Mono.dll` (Mono build)
 
-Use the one matching your game build (Mono vs IL2CPP). If unsure, the IL2CPP build typically includes `GameAssembly.dll`; the pure Mono build has only a large set of managed assemblies under `..._Data/Managed/`.
+To tell which you have, open the folder with `Schedule I.exe` in it:
+
+- **`GameAssembly.dll` sits next to the exe** — you have the **IL2CPP** build. This is what a standard Steam install is. **If you are not sure, it is this one.**
+- **No `GameAssembly.dll`, and `Schedule I_Data/Managed/` is full of `.dll` files instead** — you have the **Mono** build, usually a Steam beta branch.
+
+**Getting it wrong is harmless.** The mod just will not load and MelonLoader says so; swap the file and you are fine.
 
 ### 3. Install
-Place the chosen DLL in your `Schedule I/Mods/` folder (created by MelonLoader).  
-Only install **one** variant that matches your game build.
+Place the chosen DLL in your `Schedule I/Mods/` folder (created by MelonLoader).
+
+**Only ever have one of the two DLLs in your Mods folder.** Do not put both in.
 
 ### 4. Configure
 Edit the config file (it is created after first launch). Save changes; they apply automatically.
@@ -151,10 +158,18 @@ Either fix works:
 **Single-player is unaffected either way.** Without Steam there is no lobby, so there is nothing to sync — the
 error looks alarming but it cannot cause your clock to drift on its own.
 
+### It worked before a Schedule I update and now it does not
+
+**Worth reporting rather than reinstalling.** This mod reaches into the game's time system by name, and a
+game update can rename what it reaches for. The log will say so.
+
 ### Where the log is
 
 `MelonLoader\Latest.log`, in your Schedule I folder. Set `EnableDebugLogging = true`, reproduce the problem,
 and attach that file when reporting anything.
+
+**Say which build you are on (Mono or IL2CPP) and whether you were hosting or joining.** For anything
+involving time drifting between players, that last detail is usually the whole answer.
 
 ## Credits
 - **Source:** <https://github.com/DropDaDeuce/Time-Never-Stops>  

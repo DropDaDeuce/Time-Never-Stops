@@ -176,4 +176,5 @@ Where the log is
   MelonLoader\Latest.log, in your Schedule I folder. That is the file to attach.
 
   Mod page:  https://www.nexusmods.com/schedule1/mods/1141
+  Discord:   https://discord.com/channels/1349221936470687764/1403303558232801433
   Source:    https://github.com/DropDaDeuce/Time-Never-Stops

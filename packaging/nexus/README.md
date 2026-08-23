@@ -1,5 +1,13 @@
 # packaging\nexus
 
+> **This file is MAINTAINER documentation for the packaging folder. It is NOT the Nexus page and it
+> is NOT shipped to anyone.** Overwritten once (2026-08-23) with a copy of the repo `README.md` on the
+> reasonable assumption that they were the same thing. They are not, and here is the map:
+> **the Nexus PAGE BODY is `Nexus_Description.bbcode`** (BBCode, pasted into the description box);
+> **the file players read inside the zip is `MANUAL-INSTALL.txt`**; the repo `README.md` is the
+> Thunderstore page body and is copied into the archive by `pack-nexus.ps1` untouched.
+> A player-facing link or feature blurb belongs in those three, never here.
+
 The Nexus Mods archive. `build-pack.ps1` runs `pack-nexus.ps1` on every pack, so a normal
 `.\run-build.ps1` produces three zips in `Packages\`: the two Thunderstore packages and
 `TimeNeverStops-<version>.zip` for Nexus.
