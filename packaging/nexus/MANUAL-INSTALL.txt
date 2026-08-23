@@ -1,0 +1,179 @@
+TIME NEVER STOPS - MANUAL INSTALL
+=================================
+
+If you are using Vortex or Mod Organizer 2, KEEP READING ANYWAY for one thing: those
+managers install this mod, but they cannot install MelonLoader, and without MelonLoader
+nothing here does anything. Step 1 is yours either way.
+
+This download contains BOTH builds of the mod. You install exactly one of them.
+
+
+WHAT YOU NEED, IN ONE PLACE
+---------------------------
+Nexus cannot fetch dependencies for you. Versions below are what this release is built
+and tested against; newer is fine.
+
+  MelonLoader        0.7.3+   REQUIRED. Not on Nexus - see step 1.
+  SteamNetworkLib    1.5.0+   Required for MULTIPLAYER only. Must match your build
+                              (Mono or IL2CPP) - see step 1b.
+  S1API (Forked)     3.2.0+   Needed for the Daily Summary phone app. One download
+                              covers both builds - see step 1c.
+
+  Schedule I game version 0.4.6f13.
+
+
+STEP 1 - MELONLOADER 0.7.3+ (required, everyone, every time)
+------------------------------------------------------------
+  https://github.com/LavaGang/MelonLoader/releases
+
+Install it against the same copy of Schedule I you are modding, then run the game once so it
+creates its folders. You should end up with a "Mods" folder next to Schedule I.exe.
+
+
+STEP 1b - STEAMNETWORKLIB 1.5.0+ (required for multiplayer)
+-----------------------------------------------------------
+  https://www.nexusmods.com/schedule1/mods/1396
+
+SteamNetworkLib by ifBars is what carries time sync between players. It comes in Mono and
+IL2CPP flavours as well, and yours has to match the build you pick in step 2 below.
+
+Skipping it is not fatal - the mod loads and single-player is unaffected. What you lose is
+time syncing between players, and nothing on screen tells you that is why. The clocks just
+drift apart.
+
+
+STEP 1c - S1API (FORKED) 3.2.0+ (for the Daily Summary phone app)
+-----------------------------------------------------------------
+  https://www.nexusmods.com/schedule1/mods/1194
+
+S1API - originally by KaBooMa, now forked and maintained by ifBars - is what lets the mod
+add a Summary app to your in-game phone. Unlike SteamNetworkLib there is NO Mono/IL2CPP
+choice here: one download covers both builds and sorts itself out at runtime.
+
+Skipping it is not fatal either. The mod notices S1API is missing and falls back to the
+vanilla daily-summary popup, so you lose the app and nothing else. If you would rather not
+install it, set EnableDailySummaryApp to false and the mod stops mentioning it.
+
+
+STEP 2 - WORK OUT WHICH BUILD YOU HAVE
+--------------------------------------
+Open your Schedule I folder - the one with Schedule I.exe in it - and look:
+
+  * GameAssembly.dll is there            ->  you have the IL2CPP build
+  * no GameAssembly.dll, and instead
+    Schedule I_Data\Managed\ is full
+    of .dll files                        ->  you have the MONO build
+
+The IL2CPP build is what a standard Steam install is. Mono is the alternate branch. If you
+are not sure, it is IL2CPP.
+
+Getting this wrong is not subtle and it is not dangerous - the mod simply will not load, and
+MelonLoader will say so in its console. Swap the file and you are fine.
+
+
+STEP 3 - COPY THE FILE IN
+-------------------------
+Inside this zip you will find:
+
+  IL2CPP\Mods\TimeNeverStops_IL2Cpp.dll
+  Mono\Mods\TimeNeverStops_Mono.dll
+
+Open the folder that matches your build and drag its "Mods" folder onto your Schedule I
+folder, letting it merge. Or just copy the single .dll into the "Mods" folder MelonLoader
+made in step 1 - same result.
+
+INSTALL ONLY ONE. Do not put both DLLs in Mods.
+
+
+STEP 4 - CONFIGURE (optional)
+-----------------------------
+Run the game once. The config file is created at:
+
+  UserData\DropDaDeuce-TimeNeverStops\TimeNeverStops.cfg
+
+  DaySpeedMultiplier             1.0    0.1 to 100.0. 2.0 is a day at double speed.
+  EnableDailySummaryApp          true   Put yesterday's summary in a phone app instead of
+                                        interrupting you with the popup. Needs S1API; falls
+                                        back to the popup if it is missing or fails to load.
+  EnableDailySummaryAwake        true   Show the daily summary POPUP at 07:00 without
+                                        sleeping. Ignored while the phone app is active.
+  EnableSilentSleep              true   Run the nightly changeover with no screen takeover:
+                                        no fade to black, no HUD drop, no cursor, no wait.
+                                        Everything the game does overnight still happens,
+                                        the daily save included. Only applies when the
+                                        summary is not shown as a popup.
+  EnableLocalMultiplayer         false  MONO BUILD ONLY. Lets a second copy of the game on
+                                        the SAME PC join your session, no second Steam
+                                        account needed: load a save in one, press F6 in the
+                                        other. Same machine only - not LAN. No Steam lobby
+                                        means time sync is off, so set DaySpeedMultiplier
+                                        the same in both. Does nothing on IL2CPP.
+  TimeMultiplierOnlyMode         false  true = ONLY the speed multiplier, nothing else.
+                                        Use this if another time or sleep mod fights with it.
+  EnableDebugLogging             false  Extra logging. Turn this on before reporting a bug.
+  ForceDailySummaryWhileInUITime 800    HHmm. Post-sleep menus still open at this time get
+                                        closed so the day can move on.
+
+You can edit that file while the game is running. Changes apply within about a second.
+
+NOTE ON THE PAUSE AT 07:00
+The game saves once a night and that save is a synchronous write - a short hitch, on a
+big save maybe a couple of seconds. It happens in an unmodded game too; you just never
+see it, because vanilla hides it behind the sleep screen. With this mod you are awake
+when it lands. It is the game saving, not the mod stalling.
+
+
+MULTIPLAYER
+-----------
+Time is synchronised from the HOST over the Steam lobby, and so is the day speed - while you
+are connected to someone else's game, their multiplier wins and yours is restored when you
+leave.
+
+EVERYONE IN THE LOBBY NEEDS THIS MOD INSTALLED, AND THAT IS THE ONLY SETUP THAT IS TESTED
+OR SUPPORTED.
+
+A player without it still hits the vanilla 4:00 AM stop while everyone else carries on,
+because the game decides whether a minute may pass using THAT PLAYER'S OWN CLOCK, not the
+host's. Their clock stops dead at 4:00 and there is no reliable way for the host to push
+them past it.
+
+Host-only installs are untested and unsupported. They may happen to work; nothing is done
+to make sure they do, and problems arising from that setup are not bugs.
+
+For the same reason TimeMultiplierOnlyMode and DaySpeedMultiplier should match across the
+lobby - a player who has multiplier-only mode switched on keeps vanilla behaviour and falls
+out of step with the rest.
+
+This is the half that needs SteamNetworkLib (step 1b). If clocks drift between players, that
+is the first thing to check.
+
+
+TROUBLESHOOTING
+---------------
+Nothing happens at all
+  MelonLoader is not installed, or you installed the wrong build. Check step 2.
+
+It worked before a game update and now it does not
+  Likely. This mod reaches into the game's time system by name, and a Schedule I update can
+  rename what it reaches for. Report it with EnableDebugLogging = true and the log file.
+
+Multiplayer time sync does nothing, and the log says "Steam is not initialized"
+  You are launching the game outside Steam. Some mod managers start Schedule I.exe directly
+  instead of going through Steam, and then the game's Steam features never initialise - that
+  includes multiplayer itself, not just this mod's time sync.
+
+  Either launch through Steam, or create a file called steam_appid.txt next to Schedule I.exe
+  containing exactly:
+
+      3164500
+
+  Plain text, nothing else in the file. Steam still has to be running.
+
+  Single-player is unaffected either way - without Steam there is no lobby, so there is nothing
+  to sync. The error looks alarming but cannot make your clock drift on its own.
+
+Where the log is
+  MelonLoader\Latest.log, in your Schedule I folder. That is the file to attach.
+
+  Mod page:  https://www.nexusmods.com/schedule1/mods/1141
+  Source:    https://github.com/DropDaDeuce/Time-Never-Stops

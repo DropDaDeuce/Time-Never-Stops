@@ -100,8 +100,16 @@ if ($SkipPack) {
   exit 0
 }
 
+# Nexus first, and deliberately ABOVE the tcli guard below: it needs nothing but the two DLLs,
+# so a machine without tcli should still get its Nexus archive rather than silently getting no
+# packages at all. One zip, both builds, with a fomod installer that asks which one to use.
+Write-Host "[Pack] Nexus"
+$nexusScript = Join-Path $packDir "nexus\pack-nexus.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File $nexusScript -Version $modVersion
+if ($LASTEXITCODE -ne 0) { throw "pack-nexus.ps1 failed with exit code $LASTEXITCODE" }
+
 if (-not $cfgFlag) {
-  Write-Warning "tcli not found; skipping package build."
+  Write-Warning "tcli not found; skipping Thunderstore package build (the Nexus archive above was still written)."
   exit 0
 }
 
@@ -114,4 +122,6 @@ Write-Host ""
 Write-Host "== Completed =="
 Write-Host "IL2CPP DLL : $il2cppDll"
 Write-Host "MONO DLL   : $monoDll"
+Write-Host "Packages   : Packages\ (2 Thunderstore zips + TimeNeverStops-$modVersion.zip for Nexus)"
 Write-Host "Hashes above can be added to release notes."
+Write-Host "NOTE: -Publish uploads the THUNDERSTORE packages only. Nexus is a manual upload."

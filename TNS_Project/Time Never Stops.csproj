@@ -2,7 +2,14 @@
   <Import Project="..\Version.props" />
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>disable</Nullable>
+    <!--
+      'annotations', not 'disable' and not 'enable'. Core.cs and TimeSyncManager.cs already use
+      nullable annotations (TimeSyncManager? _timeSyncManager, string? GetLobbyData(...)), and
+      under 'disable' every one of them raised CS8632 - 32 warnings per build, which is exactly
+      the volume that hides a real warning. 'annotations' makes the ? syntax legal while leaving
+      nullable WARNINGS off, so this is a noise fix with no behaviour or codegen change.
+    -->
+    <Nullable>annotations</Nullable>
     <RootNamespace>Time_Never_Stops</RootNamespace>
     <LangVersion>latest</LangVersion>
     <IsPackable>false</IsPackable>
@@ -11,6 +18,30 @@
     <Configurations>IL2CPP;MONO</Configurations>
     <Deterministic>true</Deterministic>
     <Version>$(ModVersion)</Version>
+
+    <!--
+      DO NOT REMOVE THIS WITHOUT READING THE NEXT PARAGRAPH. It is the difference between
+      compiling against the installed game and compiling against a stale copy in Libs\.
+
+      The SDK builds AssemblySearchPaths as:
+          {CandidateAssemblyFiles};{HintPathFromItem};{TargetFrameworkDirectory};{RawFileName}
+      and {CandidateAssemblyFiles} is fed by the default None glob - which sweeps up every DLL
+      under TNS_Project\Libs\. Because it is searched FIRST, all ~290 references below resolved
+      out of Libs\Mono\ and Libs\MelonLoader\Il2CppAssemblies\ and their HintPath was never
+      consulted, which made $(S1Dir) decorative.
+
+      That is how four months of Schedule I API changes produced zero build errors: Libs\ held
+      an April snapshot, so the build stayed green while the mod had stopped matching the game.
+      Turning the glob off makes {HintPathFromItem} win, so $(S1Dir) is what actually compiles.
+
+      Fixed 2026-08-23 (board b10). Mathew refreshed Libs\Mono\ and Libs\MelonLoader\ to 0.4.6f13
+      the same day, so those copies happen to agree with the installs right now and the shadowing
+      is currently harmless. Keep this property anyway: it is what stops the SAME failure recurring
+      silently at the next game update, when Libs\ goes stale again and $(S1Dir) does not.
+
+      The vendored trees are no longer what the build compiles - treat them as a reference copy.
+    -->
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
   </PropertyGroup>
 
   <!-- MONO build -->
@@ -27,12 +58,49 @@
     <DefineConstants>TRACE;IL2CPP</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)'=='MONO'">
-    <S1Dir>D:\SteamLibrary\steamapps\common\Schedule I_alternate</S1Dir>
+  <!--
+    Where this machine's Schedule I install lives. ~290 references below resolve through it.
+
+    DO NOT HARDCODE A PATH HERE. It is machine-specific, and a value committed to this file
+    is wrong for everyone else who clones the repo - which is the state these two lines were
+    in until 2026-08-23 (they pointed at a D:\SteamLibrary\ that no longer existed, so a build
+    from clean could not resolve a single reference).
+
+    Set it in `Directory.Build.props` at the repo root instead - gitignored, imported before
+    this file, and there is a `Directory.Build.props.example` to copy. A command-line
+    `-p:S1Dir=...` also works and beats both, since a global property cannot be overridden
+    here. The empty-check below is what lets either of those win.
+  -->
+  <PropertyGroup Condition="'$(Configuration)'=='MONO' And '$(S1Dir)'==''">
+    <S1Dir>$(S1DirMono)</S1Dir>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='IL2CPP'">
-    <S1Dir>D:\SteamLibrary\steamapps\common\Schedule I_public</S1Dir>
+  <PropertyGroup Condition="'$(Configuration)'=='IL2CPP' And '$(S1Dir)'==''">
+    <S1Dir>$(S1DirIl2cpp)</S1Dir>
   </PropertyGroup>
+
+  <!--
+    Fail early and legibly. Without this, an unset or stale S1Dir produces several hundred
+    CS0246 "type or namespace not found" errors and nothing that names the actual cause -
+    the reference resolution failures are only warnings, so the real reason scrolls past.
+
+    The MelonLoader checks are separate on purpose, because they fail for a different reason:
+    MelonLoader has to be installed INTO the game copy, and the IL2CPP interop assemblies are
+    generated on first launch, so a freshly-installed MelonLoader is not enough on its own.
+  -->
+  <Target Name="ValidateS1Dir" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(S1Dir)'==''"
+           Text="S1Dir is not set for configuration '$(Configuration)'. Copy Directory.Build.props.example to Directory.Build.props in the repo root and point it at your Schedule I installs, or pass -p:S1Dir=... on the command line." />
+    <Error Condition="!Exists('$(S1Dir)')"
+           Text="S1Dir does not exist: '$(S1Dir)'. Fix the path in Directory.Build.props (repo root)." />
+    <Error Condition="'$(Configuration)'=='MONO' And !Exists('$(S1Dir)\Schedule I_Data\Managed\Assembly-CSharp.dll')"
+           Text="'$(S1Dir)' does not look like a MONO install - Schedule I_Data\Managed\Assembly-CSharp.dll is missing. The MONO configuration needs the Mono build of the game (no GameAssembly.dll)." />
+    <Error Condition="'$(Configuration)'=='IL2CPP' And !Exists('$(S1Dir)\GameAssembly.dll')"
+           Text="'$(S1Dir)' does not look like an IL2CPP install - GameAssembly.dll is missing. The IL2CPP configuration needs the IL2CPP build of the game." />
+    <Error Condition="'$(Configuration)'=='MONO' And !Exists('$(S1Dir)\MelonLoader\net35\0Harmony.dll')"
+           Text="MelonLoader is not installed in '$(S1Dir)'. Install it into that copy of the game - the MONO build references MelonLoader\net35\0Harmony.dll from it." />
+    <Error Condition="'$(Configuration)'=='IL2CPP' And !Exists('$(S1Dir)\MelonLoader\Il2CppAssemblies')"
+           Text="'$(S1Dir)\MelonLoader\Il2CppAssemblies' is missing. Install MelonLoader into that copy of the game AND LAUNCH IT ONCE - the Il2Cpp interop assemblies this configuration references are generated on first run, so installing MelonLoader alone is not enough." />
+  </Target>
 
   <PropertyGroup>
     <BaseIntermediateOutputPath>obj\$(Configuration)\</BaseIntermediateOutputPath>
@@ -66,6 +134,14 @@
 		</Reference>
 		<Reference Include="Assembly-CSharp">
 			<HintPath>$(S1Dir)\Schedule I_Data\Managed\Assembly-CSharp.dll</HintPath>
+		</Reference>
+		<!--
+			ScheduleOne.Core holds the base types that Assembly-CSharp's classes inherit from —
+			BaseItemDefinition, where ItemDefinition.Name and .Icon actually live. Without it the
+			compiler can see ItemDefinition but not its inherited members (CS0012).
+		-->
+		<Reference Include="ScheduleOne.Core">
+			<HintPath>$(S1Dir)\Schedule I_Data\Managed\ScheduleOne.Core.dll</HintPath>
 		</Reference>
 		<Reference Include="AstarPathfindingProject">
 			<HintPath>$(S1Dir)\Schedule I_Data\Managed\AstarPathfindingProject.dll</HintPath>
@@ -498,6 +574,10 @@
 		</Reference>
 		<Reference Include="Assembly-CSharp">
 			<HintPath>$(S1Dir)\MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
+		</Reference>
+		<!-- See the MONO arm's note: BaseItemDefinition lives here, not in Assembly-CSharp. -->
+		<Reference Include="Il2CppScheduleOne.Core">
+			<HintPath>$(S1Dir)\MelonLoader\Il2CppAssemblies\Il2CppScheduleOne.Core.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppAeLa.EasyFeedback">
 			<HintPath>$(S1Dir)\MelonLoader\Il2CppAssemblies\Il2CppAeLa.EasyFeedback.dll</HintPath>
@@ -936,10 +1016,29 @@
 	<ItemGroup>
 		<Compile Include="Core.cs" />
 		<Compile Include="TimeSyncManager.cs" />
+		<!--
+			EnableDefaultCompileItems is false above, so a new .cs file is NOT picked up
+			automatically — it must be listed here or it silently will not compile.
+		-->
+		<Compile Include="DailySummaryStore.cs" />
+		<Compile Include="S1APIBridge.cs" />
+		<Compile Include="DailySummaryApp.cs" />
+		<Compile Include="LocalMultiplayer.cs" />
 		<Compile Include="TemplateUtils\AssetBundleUtils.cs" />
 		<Folder Include="Libs\" />
 		<!--Uncomment if with assetbundle-->
 		<!--<EmbeddedResource Include="Assets\your.assetbundle" />-->
+		<!--
+			The phone-app icon, embedded rather than shipped loose.
+
+			S1API's PhoneApp.IconFileName loads a PNG from MelonEnvironment.ModsDirectory, which
+			would mean asking players to drop a file next to the DLL — and logging an Error on every
+			single load if they did not. Embedding it makes the app self-contained: the DLL is the
+			only thing that has to be installed, and there is no missing-file failure mode.
+			Reused from the repo-root icon that already ships as the Thunderstore/Nexus package icon.
+			Resource name: Time_Never_Stops.icon.png
+		-->
+		<EmbeddedResource Include="..\icon.png" LogicalName="Time_Never_Stops.icon.png" />
 	</ItemGroup>
 
 	<!--Packages-->
@@ -948,6 +1047,24 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
+
+		<!--
+			S1API — the community cross-compatibility layer. Used ONLY for the Daily Summary phone
+			app (DailySummaryApp.cs); nothing in the time/sleep/sync path touches it.
+
+			ONE reference serves BOTH arms on purpose. The package ships a single netstandard2.1
+			assembly built against the Mono game refs, and net6.0 consumes netstandard2.1 fine. At
+			runtime the S1APILoader plugin enables S1API.Mono.MelonLoader.dll or
+			S1API.Il2Cpp.MelonLoader.dll to match the game; both carry assembly identity "S1API" and
+			the same public surface, so our compile-time binding resolves either way. This is the
+			pattern S1API itself documents and that k073l/s1-modsapp ships.
+
+			ExcludeAssets=runtime is REQUIRED: players get S1API from its own Thunderstore/Nexus
+			package (declared in packaging\*.toml). Without this, S1API.dll and Newtonsoft.Json.dll
+			would be copied into our output and end up shipped inside our zips, shadowing the
+			player's real install.
+		-->
+		<PackageReference Include="S1API.Forked" Version="3.2.0" ExcludeAssets="runtime" />
 	</ItemGroup>
 	
 	<!--SteamNetworkLib Reference-->
@@ -969,8 +1086,19 @@
 		<Publicize Include="Assembly-CSharp:ScheduleOne.NPCs.NPC.Start" />
 	</ItemGroup>
 
+  <!--
+    Stage the built DLL into whichever test install this configuration points at.
+
+    This used to be IL2CPP-only, which meant a MONO test run silently exercised whatever DLL the
+    PREVIOUS batch left in Schedule I Mono\Mods\ — b22 found that install sitting a whole batch
+    behind. Both arms stage now, so "I built it" and "the game is running it" mean the same thing.
+
+    Still gated on Exists('$(S1Dir)\Mods') so a machine without that install just skips it.
+    $(S1Dir) is set per configuration by the gitignored Directory.Build.props at the repo root.
+  -->
   <Target Name="PostBuild" AfterTargets="Build"
-          Condition="'$(Configuration)'=='IL2CPP' AND Exists('$(S1Dir)\Mods')">
+          Condition="Exists('$(S1Dir)\Mods')">
+    <Message Text="[$(Configuration)] Staging $(TargetFileName) -> $(S1Dir)\Mods\" Importance="high" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(S1Dir)\Mods\" />
   </Target>
   <ItemGroup Condition="'$(Configuration)'=='MONO'">

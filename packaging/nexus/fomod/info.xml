@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FOMOD metadata for the Nexus Mods package.
+
+  The version below is a placeholder token, not a real number. pack-nexus.ps1 substitutes
+  <ModVersion> from Version.props into it when it stages the archive, so this file is NOT
+  another version number to keep in sync by hand. Do not replace the token with a literal.
+
+  (This comment deliberately avoids spelling the token out - the substitution is a plain text
+  replace and would rewrite the explanation along with the value.)
+-->
+<fomod>
+  <Name>Time Never Stops</Name>
+  <Author>DropDaDeuce</Author>
+  <Version MachineVersion="@VERSION@">@VERSION@</Version>
+  <Website>https://www.nexusmods.com/schedule1/mods/1141</Website>
+  <Description>Time no longer stops at 4AM, plus a configurable day speed multiplier and host-authoritative time sync for multiplayer. Requires MelonLoader. Ships Mono and IL2CPP builds - the installer asks which one you need.</Description>
+  <Groups>
+    <element>Gameplay</element>
+    <element>Miscellaneous</element>
+  </Groups>
+</fomod>

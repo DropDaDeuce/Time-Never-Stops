@@ -191,10 +191,12 @@ namespace Time_Never_Stops
         /// </summary>
         private IEnumerator WaitForTimeManagerAndStartSync()
         {
+            TNSLog.Debug("TimeSyncManager: waiting for TimeManager before starting sync coroutines...");
             while (TimeManager.Instance == null)
             {
                 yield return null;
             }
+            TNSLog.Debug("TimeSyncManager: TimeManager ready, starting sync coroutines.");
             StartSyncCoroutines();
         }
 
@@ -281,7 +283,7 @@ namespace Time_Never_Stops
 
             try
             {
-                float hostMultiplier = _getHostMultiplierCallback?.Invoke() ?? TimeManager.Instance.TimeProgressionMultiplier;
+                float hostMultiplier = _getHostMultiplierCallback?.Invoke() ?? TimeManager.Instance.TimeSpeedMultiplier;
                 
                 // Only sync if multiplier changed (with small epsilon for floating point comparison)
                 if (float.IsNaN(_lastSyncedMultiplier) || Mathf.Abs(_lastSyncedMultiplier - hostMultiplier) > 0.0001f)
@@ -289,8 +291,7 @@ namespace Time_Never_Stops
                     string multiplierStr = hostMultiplier.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
                     _steamClient.SetLobbyData(LOBBY_DATA_KEY_TIME_MULTIPLIER, multiplierStr);
                     _lastSyncedMultiplier = hostMultiplier;
-                    TNSLog.Debug($"Host synced multiplier to lobby: {hostMultiplier}");
-                    TNSLog.Debug($"[Config Sync] Host sent time multiplier config to clients: {hostMultiplier:0.########}x");
+                    TNSLog.Debug($"Host synced multiplier to lobby: {hostMultiplier:0.########}x");
                 }
             }
             catch (Exception ex)
@@ -328,11 +329,12 @@ namespace Time_Never_Stops
                     // Save original multiplier if not already saved
                     if (_clientOriginalMultiplier == null)
                     {
-                        _clientOriginalMultiplier = tm.TimeProgressionMultiplier;
+                        _clientOriginalMultiplier = tm.TimeSpeedMultiplier;
                     }
 
-                    // Apply host's multiplier
-                    tm.TimeProgressionMultiplier = hostMultiplier;
+                    // Apply host's multiplier directly — SetTimeSpeedMultiplier() has a
+                    // server-only guard in the new assembly, so we bypass it via TMAccess.
+                    TMAccess.SetTimeSpeedMultiplierDirect(tm, hostMultiplier);
                     _lastSyncedHostMultiplier = hostMultiplier;
                     
                     TNSLog.Msg($"Synced time multiplier to host: {hostMultiplier:0.########}x (was {_clientOriginalMultiplier.Value:0.########}x)");
@@ -379,9 +381,12 @@ namespace Time_Never_Stops
                             int localCurrentTime = tm.CurrentTime;
                             int localElapsedDays = tm.ElapsedDays;
 
-                            // Calculate time difference
-                            int timeDiff = Mathf.Abs(localCurrentTime - hostCurrentTime);
-                            int daysDiff = Mathf.Abs(localElapsedDays - hostElapsedDays);
+                            // Convert HHMM to total minutes before diffing — raw HHMM subtraction
+                            // gives wrong results across hour boundaries (e.g. 059 vs 100 = 41, not 1).
+                            int localMinutes = (localCurrentTime / 100) * 60 + (localCurrentTime % 100);
+                            int hostMinutes  = (hostCurrentTime  / 100) * 60 + (hostCurrentTime  % 100);
+                            int timeDiff  = Mathf.Abs(localMinutes - hostMinutes);
+                            int daysDiff  = Mathf.Abs(localElapsedDays - hostElapsedDays);
 
                             // Only sync if there's a significant difference, days don't match, or first sync
                             bool needsSync = isFirstSync || (timeDiff > MAX_TIME_DIFF_THRESHOLD) || (daysDiff > 0);
@@ -397,7 +402,7 @@ namespace Time_Never_Stops
                                 }
 
                                 // Update daily minute total
-                                TMAccess.SetDailyMinTotal(tm, TimeManager.GetMinSumFrom24HourTime(hostCurrentTime));
+                                TMAccess.SetDailyMinSum(tm, TimeManager.GetMinSumFrom24HourTime(hostCurrentTime));
 
                                 // Update tracking to prevent repeated syncing to same value
                                 _lastSyncedHostTime = hostCurrentTime;
@@ -407,7 +412,8 @@ namespace Time_Never_Stops
                             }
                             else
                             {
-                                // Host data changed but difference is small, just update tracking
+                                // Host data changed but difference is within threshold — just update tracking
+                                TNSLog.Debug($"Client skipped sync: timeDiff={timeDiff}min <= {MAX_TIME_DIFF_THRESHOLD}, daysDiff={daysDiff}. (local={localCurrentTime:D4}, host={hostCurrentTime:D4})");
                                 _lastSyncedHostTime = hostCurrentTime;
                                 _lastSyncedHostDays = hostElapsedDays;
                             }
@@ -457,7 +463,7 @@ namespace Time_Never_Stops
                             {
                                 TMAccess.SetCurrentTime(tm, hostCurrentTime);
                                 TMAccess.SetElapsedDays(tm, hostElapsedDays);
-                                TMAccess.SetDailyMinTotal(tm, TimeManager.GetMinSumFrom24HourTime(hostCurrentTime));
+                                TMAccess.SetDailyMinSum(tm, TimeManager.GetMinSumFrom24HourTime(hostCurrentTime));
 
                                 // Update tracking to prevent repeated syncing to same value
                                 _lastSyncedHostTime = hostCurrentTime;
@@ -485,19 +491,22 @@ namespace Time_Never_Stops
         /// </summary>
         private void OnLobbyJoined(object? sender, LobbyJoinedEventArgs e)
         {
-            TNSLog.Debug("Lobby joined, starting time sync");
-            
+            TNSLog.Debug($"Lobby joined. IsHost={IsHost}, TM ready={TimeManager.Instance != null}.");
+
             if (!IsHost && TimeManager.Instance != null)
             {
                 // Client: Sync to host's multiplier
+                string? existingMultiplier = _steamClient?.GetLobbyData(LOBBY_DATA_KEY_TIME_MULTIPLIER);
+                TNSLog.Debug($"Client joined lobby. Host multiplier in lobby data: '{existingMultiplier}'.");
                 SyncToHostMultiplier();
             }
             else if (IsHost)
             {
                 // Host: Set multiplier in lobby data
+                TNSLog.Debug($"Host joined/created lobby. Broadcasting multiplier.");
                 SyncHostMultiplierToLobby();
             }
-            
+
             StartSyncCoroutines();
         }
 
@@ -506,14 +515,14 @@ namespace Time_Never_Stops
         /// </summary>
         private void OnLobbyCreated(object? sender, LobbyCreatedEventArgs e)
         {
-            TNSLog.Debug("Lobby created, starting time sync");
-            
+            TNSLog.Debug($"Lobby created. IsHost={IsHost}.");
+
             // Host: Set multiplier in lobby data
             if (IsHost)
             {
                 SyncHostMultiplierToLobby();
             }
-            
+
             StartSyncCoroutines();
         }
 
@@ -522,7 +531,9 @@ namespace Time_Never_Stops
         /// </summary>
         private void OnLobbyLeft(object? sender, LobbyLeftEventArgs e)
         {
-            TNSLog.Debug("Lobby left, stopping time sync");
+            // Only log if we were actually in a lobby (sender == null means called from Dispose cleanup)
+            if (sender != null)
+                TNSLog.Debug("Lobby left, stopping time sync");
             
             if (_syncCoroutine != null)
             {
@@ -541,7 +552,7 @@ namespace Time_Never_Stops
             {
                 try
                 {
-                    TimeManager.Instance.TimeProgressionMultiplier = _clientOriginalMultiplier.Value;
+                    TMAccess.SetTimeSpeedMultiplierDirect(TimeManager.Instance, _clientOriginalMultiplier.Value);
                     TNSLog.Msg($"Restored original time multiplier: {_clientOriginalMultiplier.Value:0.########}x");
                 }
                 catch (Exception ex)
@@ -594,4 +605,3 @@ namespace Time_Never_Stops
         }
     }
 }
-

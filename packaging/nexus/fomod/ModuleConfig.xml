@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FOMOD installer script for Vortex / Mod Organizer 2.
+
+  Every `source` path below is relative to the ROOT OF THE BUILT ZIP, not to this file, and
+  every `destination` is relative to the Schedule I game folder (the one holding
+  Schedule I.exe). pack-nexus.ps1 produces that layout - if you move a folder there, the
+  matching source path here has to move with it or the installer silently drops the files.
+
+  WHY THERE IS NO requiredInstallFiles BLOCK (and note: an XML comment may not contain a
+  double hyphen, which is why nothing in this file underlines a heading)
+
+  This mod ships as TWO MUTUALLY EXCLUSIVE builds - Mono and IL2CPP - and installing the wrong
+  one does not half-work, it fails to load. So nothing is unconditional: the whole install is
+  the one choice on step 2. That is the single best reason for this package to exist, because
+  picking the right build is the mistake players actually make, and a radio button cannot be
+  got wrong the way "download the correct file" can.
+
+  The archive is still usable by hand: the zip root holds `Mono\Mods\` and `IL2CPP\Mods\`, and
+  a player who never installs a mod manager drags the `Mods` folder out of whichever one
+  matches their game. That redundancy is deliberate.
+-->
+<!--
+  THE SCHEMA URL BELOW IS A MAGIC STRING. COPY IT EXACTLY - CASING INCLUDED.
+
+  It is never fetched (that host has been dead for years). It is how Vortex decides WHICH
+  schema version to validate against, and it does not parse the attribute as XML - it runs a
+  raw text regex over the whole file, hunting for the schema-location attribute followed by
+  either "XmlScript" or "ModConfig" and then the version. That regex is built with
+  RegexOptions.Singleline and nothing else, so it is case SENSITIVE, and on no match the
+  version silently defaults to "1.0". Three ways to break it, all silent:
+    * lowercase "modconfig"          - breaks a real install
+    * a prefix other than "xsi:"     - the regex matches literal text, not a namespace
+    * spaces around the "="          - same reason
+
+  Any of those validates this file against XmlScript1.0.xsd, a schema from before moduleImage
+  and installSteps existed. Vortex then reports a content-model error on an early line and says
+  NOTHING about versions, which is what makes it expensive to diagnose.
+
+  The exact regex is NOT reproduced here on purpose. Vortex takes the FIRST match in the file,
+  so spelling the attribute name out a second time anywhere above the config element creates a
+  decoy that can capture the match and yield a garbage version. pack-nexus.ps1 fails the pack
+  if that attribute appears more than once. Read the regex in the source instead:
+  Nexus-Mods/fomod-installer, XmlScriptType.cs, field RegexVersion.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+
+  <moduleName>Time Never Stops</moduleName>
+
+  <moduleImage path="fomod\icon.png" showImage="true" showFade="true" height="-1" />
+
+  <installSteps order="Explicit">
+
+    <!--
+      A read-only notice page, not a choice. It installs nothing - the group is SelectAll with a
+      single Required entry, so the box is ticked and disabled and the panel just shows text.
+
+      It exists because MelonLoader is not on Nexus and a mod manager will not fetch it, so
+      there is no automated path that tells a Nexus user what they still need. Without it the
+      game simply starts vanilla and nothing anywhere says why.
+    -->
+    <installStep name="Before you install - please read">
+      <optionalFileGroups order="Explicit">
+        <group name="Two other mods are needed, and neither is installed for you" type="SelectAll">
+          <plugins order="Explicit">
+            <plugin name="MelonLoader (required) and SteamNetworkLib (multiplayer)">
+              <description>1. MELONLOADER - required, and it is not on Nexus.
+
+  https://github.com/LavaGang/MelonLoader/releases
+
+This mod runs on MelonLoader and cannot be installed for you. Without it the game starts completely normally and nothing tells you the mod is missing. Install it against the same copy of Schedule I you are installing this mod into, and run the game once so it creates its folders.
+
+2. STEAMNETWORKLIB by ifBars - required for multiplayer time sync.
+
+  https://www.nexusmods.com/schedule1/mods/1396
+
+This is what carries the clock between players. IMPORTANT: it comes in Mono and IL2CPP flavours too, and yours has to match whichever build you pick on the next page.
+
+Skipping it is not fatal - the mod loads and single-player is completely unaffected. What you lose is time syncing between players, and nothing on screen tells you that is why; the clocks simply drift apart.
+
+You can finish this installer first - order does not matter, only that both are present before you play.
+
+MULTIPLAYER: time is synchronised from the host. The host's day speed is pushed to everyone in the lobby, so a client's own multiplier setting is overridden while they are connected and restored when they leave.
+
+The config file appears after the first run, at:
+
+  UserData\DropDaDeuce-TimeNeverStops\TimeNeverStops.cfg
+
+You can edit it while the game is running - changes are picked up within about a second.</description>
+              <typeDescriptor>
+                <type name="Required" />
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+
+    <!--
+      The whole install. SelectExactlyOne makes these radio buttons, so the two builds cannot
+      both be picked and neither can be skipped.
+    -->
+    <installStep name="Which build of Schedule I do you have?">
+      <optionalFileGroups order="Explicit">
+        <group name="Pick one - installing the wrong build does nothing at all" type="SelectExactlyOne">
+          <plugins order="Explicit">
+
+            <plugin name="IL2CPP build (the normal Steam version)">
+              <description>Installs TimeNeverStops_IL2Cpp.dll.
+
+HOW TO TELL: open your Schedule I folder. If there is a GameAssembly.dll sitting next to Schedule I.exe, this is the one you want.
+
+This is what a standard Steam install of Schedule I is. Pick this if you are not sure.
+
+If you are using SteamNetworkLib for multiplayer sync, take its IL2CPP flavour to match.</description>
+              <files>
+                <folder source="IL2CPP\Mods" destination="Mods" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Recommended" />
+              </typeDescriptor>
+            </plugin>
+
+            <plugin name="Mono build (the alternate / beta branch)">
+              <description>Installs TimeNeverStops_Mono.dll.
+
+HOW TO TELL: there is NO GameAssembly.dll, and instead Schedule I_Data\Managed\ is full of .dll files (Assembly-CSharp.dll and a few hundred others).
+
+This is the alternate build, usually opted into through Steam's beta branches.
+
+If you are using SteamNetworkLib for multiplayer sync, take its Mono flavour to match.</description>
+              <files>
+                <folder source="Mono\Mods" destination="Mods" priority="0" />
+              </files>
+              <typeDescriptor>
+                <type name="Optional" />
+              </typeDescriptor>
+            </plugin>
+
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+
+</config>

@@ -1,0 +1,39 @@
+<!--
+  TEMPLATE. Copy this file to `Directory.Build.props` (same folder) and edit the two paths.
+  That copy is gitignored; this one is tracked so the setup is discoverable.
+
+  WHY THIS EXISTS
+  The project resolves roughly 290 assembly references out of a Schedule I install through
+  $(S1Dir), and that path is different on every machine. Hardcoding it in the csproj means the
+  build only ever works for one person - which is exactly the state this file replaced.
+
+  WHAT TO POINT IT AT
+  Schedule I ships in two flavours and each configuration needs its own copy of the game:
+
+    MONO    -> an install with `Schedule I_Data\Managed\Assembly-CSharp.dll` and no GameAssembly.dll
+    IL2CPP  -> an install with `GameAssembly.dll` next to `Schedule I.exe`
+
+  MELONLOADER HAS TO BE INSTALLED INTO EACH OF THEM, and it is not optional:
+
+    MONO    needs $(S1Dir)\MelonLoader\net35\0Harmony.dll
+    IL2CPP  needs $(S1Dir)\MelonLoader\Il2CppAssemblies\*  - these are GENERATED, so the game
+            has to be launched once with MelonLoader installed before the folder exists.
+
+  A build with a wrong or unprepared path fails on the reference resolution, and the csproj
+  raises a readable error naming the missing folder rather than several hundred CS0246s.
+
+  USE A COPY YOU DO NOT PLAY ON. The IL2CPP configuration copies its output DLL into
+  $(S1Dir)\Mods\ after every build, so pointing this at your everyday, mod-managed install
+  means your builds land in it.
+-->
+<Project>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'MONO' And '$(S1Dir)' == ''">
+    <S1Dir>C:\Path\To\Your\Schedule I Mono</S1Dir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'IL2CPP' And '$(S1Dir)' == ''">
+    <S1Dir>C:\Path\To\Your\Schedule I IL2CPP</S1Dir>
+  </PropertyGroup>
+
+</Project>

@@ -60,6 +60,9 @@ if ($VerboseHashes) {
   }
 }
 
+# Thunderstore only. The Nexus archive (Packages\TimeNeverStops-<ver>.zip, built by
+# packaging\nexus\pack-nexus.ps1) has no CLI upload path - it is dragged onto the mod page by
+# hand, and its Name and Version fields are typed in there.
 if ($Publish -and -not $SkipPack) {
   if (-not $cfgFlag) { throw "tcli not found (cannot publish)." }
   Write-Host "Publishing IL2CPP package..."

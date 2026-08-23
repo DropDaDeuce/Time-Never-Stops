@@ -7,12 +7,24 @@ repository = "https://thunderstore.io"
 [package]
 namespace = "DropDaDeuce"
 name = "TimeNeverStops_IL2Cpp"
-versionNumber = "1.4.0"
+versionNumber = "1.5.0"
 description = "Time no longer stops at 4AM. Also adds a config option to set the day speed multiplier."
 websiteUrl = "https://github.com/DropDaDeuce/Time-Never-Stops"
 containsNsfwContent = false
 [package.dependencies]
-LavaGang-MelonLoader = "0.7.1"
+LavaGang-MelonLoader = "0.7.3"
+# Multiplayer time sync goes over Steam lobby data through this library. It is a hard
+# requirement, not an optional extra: without it TimeSyncManager fails to construct, the
+# failure is caught and logged at Debug level, and sync is silently off for that player.
+# Must match the build: the IL2CPP package here, SteamNetworkLib_Mono in the Mono toml.
+ifBars-SteamNetworkLib_Il2Cpp = "1.5.0"
+# Powers the Daily Summary phone app (EnableDailySummaryApp, on by default). Unlike SteamNetworkLib
+# this is NOT load-bearing: without it the mod detects its absence and falls back to the vanilla
+# daily-summary popup, so time, sleep and sync are unaffected. Declared because the feature is on by
+# default and a mod manager should install what the default configuration needs.
+# ONE package covers BOTH arms — its loader plugin picks Mono or Il2Cpp at runtime — so this line is
+# identical in thunderstore_mono.toml, unlike SteamNetworkLib which is split per build.
+ifBars-S1API_Forked = "3.2.0"
 
 [build]
 icon = "../icon.png"
@@ -31,3 +43,4 @@ target = "/"
 communities = [ "schedule-i", ]
 [publish.categories]
 lethal-company = [ "Mods", "IL2CPP", ]
+
