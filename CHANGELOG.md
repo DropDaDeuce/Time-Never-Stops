@@ -1,5 +1,54 @@
 # Changelog
 
+## [1.5.0] - Daily Summary App & Silent Sleep - 2026-08-23
+
+> Supersedes 1.4.1, which was prepared but never published. Everything from it ships here, so
+> the upgrade path for players is 1.4.0 to 1.5.0.
+
+### Added
+
+- **Daily Summary App:**
+    - Added a Summary app to the in-game phone, so the summary no longer interrupts you.
+    - Added scrolling to the summary, so a busy day no longer has items cut off.
+    - Added rank-ups and region unlocks as lines in the app instead of full-screen takeovers.
+    - Added `EnableDailySummaryApp` (default on). Requires S1API by ifBars.
+- **Silent Sleep:**
+    - Added silent sleep, so the nightly changeover no longer takes over your screen.
+    - Added story sleep messages to the summary app so they are not lost with the sleep screen.
+    - Added `EnableSilentSleep` (default on).
+- **Multiplayer:**
+    - Added time synchronisation between everyone in a Steam lobby.
+    - Added the host's day speed being applied to every player who joins.
+    - Added restoring your own day speed when you leave someone else's game.
+    - Added local multiplayer for two copies of the game on one PC (default off, Mono build only).
+    - Added `EnableLocalMultiplayer` (default off).
+- Added `ForceDailySummaryWhileInUITime` (default 800) to close post-sleep menus left open.
+
+### Changed
+
+- Updated the mod for Schedule I 0.4.6f13.
+- Changed the day speed in multiplayer so the host now sets it for everyone.
+- Changed the daily summary popup to stay hidden while the phone app is active.
+
+### Fixed
+
+- Fixed the day speed multiplier doing nothing at all on the IL2CPP build.
+- Fixed IL2CPP clients ignoring the host's day speed.
+- Fixed clients soft-locking on a black "Waiting for host" screen at the daily summary.
+- Fixed the player's head turning while the daily summary was on screen.
+- Fixed the HUD snapping at the end of sleep.
+- Fixed a false "sleep did not finish" warning on nights with a story message.
+- Fixed the hour and day events firing in the wrong order at midnight.
+- Fixed time sync degrading after loading several saves without restarting the game.
+- Fixed mod behavior for the 0.4.5f2 game update.
+
+### Notes
+
+- Massive thanks to ifBars for the Steam lobby networking implementation!
+- Every player in the lobby needs this mod. Host-only installs are untested and unsupported.
+- The game saves once a night and that briefly freezes it. This happens in an unmodded game too.
+- Not yet verified in a live round: local multiplayer, and the Mono build with two players.
+
 ## [1.4.0] - Stop Breaking Things Update - 2025-09-12
 ### Added
 - Config option `EnableDebugLogging` (`cfgDebugLogging`) to selectively emit detailed diagnostic messages without cluttering normal logs.

@@ -364,3 +364,10 @@ MigrationBackup/
 FodyWeavers.xsd
 
 /TNS_Project/Libs/
+# Local machine paths to the Schedule I installs (see Directory.Build.props.example)
+/Directory.Build.props
+
+# Claude Code worktrees — MUST NEVER be committed (CLAUDE.md, Git rules).
+# Only .claude/worktrees/ is ignored, not all of .claude/: whether agents/skills/settings
+# get tracked is still an open decision (ToDo item 5).
+/.claude/worktrees/
